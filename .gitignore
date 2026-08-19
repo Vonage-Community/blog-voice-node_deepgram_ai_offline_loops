@@ -1,0 +1,24 @@
+# Secrets — never commit these. Set up before any .env/key file is created.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# SQLite database files (call evidence is regenerated per run)
+*.db
+*.db-journal
+*.sqlite
+data/
+
+# Logs and OS cruft
+*.log
+.DS_Store
+
+# Local tooling / internal planning notes — not part of the published tutorial
+.claude/
+tasks/
