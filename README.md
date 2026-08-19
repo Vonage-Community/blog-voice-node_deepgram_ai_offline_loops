@@ -2,9 +2,9 @@
 
 A companion repo for the Vonage developer-blog tutorial **"Build a Bounded Order-Status Voice Agent With Vonage and Deepgram."**
 
-This is **Part 1** of a two-part series. It takes the generic, open-ended voice bot from the prerequisite guide and turns it into a **bounded business workflow**: one approved tool, a strict timeout-and-retry policy, deterministic fallbacks for every failure mode, an out-of-scope handoff, per-stage latency instrumentation, and a structured **call record** written to SQLite after every call. Part 2 builds offline agent loops that read those call records.
+This application takes the basic, open-ended voice bot from the prerequisite guide and turns it into a **bounded business workflow**: one approved tool, a strict timeout-and-retry policy, deterministic fallbacks for every failure mode, an out-of-scope handoff, per-stage latency instrumentation, and a structured **call record** written to SQLite after every call. A future blog will build offline agent loops that read those call records.
 
-> **Prerequisite, not a starting point.** This tutorial builds directly on top of [How to Build an AI Voice Agent with Vonage Voice API and Deepgram](https://developer.vonage.com/en/voice/voice-api/guides/voice-ai-agent-deepgram). That guide covers creating the Vonage application, wiring answer/event webhooks, bridging the call to a WebSocket, and forwarding audio to Deepgram for ASR, LLM orchestration, and TTS. We don't reproduce it — we add the architecture layer on top.
+> This tutorial builds directly on top of [How to Build an AI Voice Agent with Vonage Voice API and Deepgram](https://developer.vonage.com/en/voice/voice-api/guides/voice-ai-agent-deepgram). That guide covers creating the Vonage application, wiring answer/event webhooks, bridging the call to a WebSocket, and forwarding audio to Deepgram for ASR, LLM orchestration, and TTS. We don't reproduce it — we add the architecture layer on top.
 
 The server runs on Node.js 20+ / TypeScript, backed by Deepgram's Voice Agent API (`nova-3` ASR, Anthropic Claude via Deepgram's managed `think`, Aura-2 TTS) and the Vonage Voice API for the live phone call. Call records are stored in SQLite via `better-sqlite3`.
 
@@ -234,41 +234,6 @@ Fixing it by wiring real SMS/transfer would violate the read-only contract and b
 
 ---
 
-## Troubleshooting
-
-The observability in this repo (`[socket]`, `[dg]`, `[tool]`, `[call]` log prefixes) is designed to make a live call diagnosable in one glance. The failures below are the real ones encountered building it:
-
-**Silence after the greeting, call drops** — the WebSocket never connected, or Deepgram rejected the connection. Check for `[socket] Vonage connected` (Vonage side) and `[dg] connected` (Deepgram side). No `[socket]` line ⇒ the Vonage webhook URL doesn't match your current ngrok URL / `BASE_URL`.
-
-**`[dg] upgrade rejected: HTTP 401`** — bad or missing `DEEPGRAM_API_KEY`, or the key belongs to a different project.
-
-**`[dg] upgrade rejected: HTTP 402 Payment Required`** — the key authenticates but the Deepgram account has no credit / billing. The Voice Agent API is paid; add credit in the Deepgram console.
-
-**`[dg] connected` then `[dg] closed` immediately (no `ConversationText`)** — Deepgram accepted the socket but rejected the `Settings` payload. Look for a `[dg] Error: {...}` line naming the field — almost always a `think`/`speak`/`listen` **model string that's deprecated or unknown**. Update the model (see `agent-config.ts`; override with `DEEPGRAM_*_MODEL`).
-
-**Greeting plays, then `[dg] Error: … CLIENT_MESSAGE_TIMEOUT`** — Deepgram connected but received **no audio**. This repo already handles the root cause (a `ws@7` vs `ws@8` mismatch: the Vonage socket from `express-ws` doesn't pass `isBinary`, so audio frames were misrouted as text). If you refactor the socket layer, keep `isBinaryFrame()` and check `npm ls ws`.
-
-**The app crashes mid-call** — a long-lived socket needs an `error` listener, or Node throws the unhandled `'error'` event and takes the process down. Both sockets have one here (`[dg] error:` / `[vonage] socket error:`).
-
-**A second order lookup returns the fallback** — expected: the contract allows one `getOrderStatus` per call. Redial to check another order.
-
----
-
-## Notes
-
-- **`AGENTS.md` is the spec.** The contract, the exact system prompt, the fallback/handoff strings, and the call-record schema are fixed there. `CLAUDE.md` is a one-line import of it.
-- **No real order database** — the mock in `order-status.ts` is intentional. IDs `A1001`–`A1004` are known; `SLOW*` forces a 2000ms delay (to trip the timeout); `FAIL*` throws a transport error (to exercise the one retry); everything else is `not_found`.
-- **Rate limiting / abuse protection** — not implemented; see the `// TODO` in the codebase. Out of scope for Part 1.
-- **ngrok URL changes** — on restart, update **both** `.env` `BASE_URL` **and** the Vonage dashboard webhooks.
-- **Production readiness** — this is an educational demo. A real deployment adds rate limiting, structured logging, auth on the webhooks, and the write-path integrations described above.
-
----
-
-## What's Next (Part 2)
-
-Part 2 builds **offline agent loops** that read the `call_records` this app writes: regression tests that assert `outcome`/`fallback_used` don't drift, transcript review, and the read-before-write pattern that safely introduces the write operations Part 1 deliberately omits. The schema is stable — Part 2 reads these rows directly.
-
----
 
 ## License
 
