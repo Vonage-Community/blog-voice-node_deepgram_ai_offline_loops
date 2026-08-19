@@ -1,6 +1,6 @@
-# Bounded Order-Status Voice Agent
+# Add Tools and Human Transfer to a Vonage + Deepgram Voice Agent
 
-A companion repo for the Vonage developer-blog tutorial **"Build a Bounded Order-Status Voice Agent With Vonage and Deepgram."**
+A companion repo for the Vonage developer-blog tutorial **"Add Tools and Human Transfer to a Vonage + Deepgram Voice Agent."**
 
 This application takes the basic, open-ended voice bot from the prerequisite guide and turns it into a **bounded business workflow**: one approved tool, a strict timeout-and-retry policy, deterministic fallbacks for every failure mode, an out-of-scope handoff, per-stage latency instrumentation, and a structured **call record** written to SQLite after every call. A future blog will build offline agent loops that read those call records.
 
