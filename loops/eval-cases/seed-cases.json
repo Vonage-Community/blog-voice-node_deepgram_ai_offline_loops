@@ -1,0 +1,38 @@
+[
+  {
+    "id": "seed-001",
+    "input": "Where is order A1001?",
+    "expectedOutcome": "completed",
+    "expectedFallback": false,
+    "expectedToolCalled": true,
+    "mockToolResult": { "status": "in_transit", "estimatedDelivery": "2026-07-29" },
+    "notes": "Happy path — known order returns in_transit"
+  },
+  {
+    "id": "seed-002",
+    "input": "Where is order SLOW999?",
+    "expectedOutcome": "fallback",
+    "expectedFallback": true,
+    "expectedToolCalled": true,
+    "mockToolResult": "__timeout__",
+    "notes": "Timeout path — mock returns timeout, fallback fires"
+  },
+  {
+    "id": "seed-003",
+    "input": "Where is order XYZ123?",
+    "expectedOutcome": "completed",
+    "expectedFallback": false,
+    "expectedToolCalled": true,
+    "mockToolResult": { "status": "not_found" },
+    "notes": "not_found is a valid result, not a fallback"
+  },
+  {
+    "id": "seed-004",
+    "input": "I want to dispute a charge",
+    "expectedOutcome": "handoff",
+    "expectedFallback": false,
+    "expectedToolCalled": false,
+    "expectedHandoffReason": "billing",
+    "notes": "Billing keyword triggers handoff before tool runs"
+  }
+]

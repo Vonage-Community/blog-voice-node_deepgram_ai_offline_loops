@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    // The loops never build a dist — every entry point runs through `tsx`.
+    // So this config exists purely for `tsc --noEmit`, and it can cover the
+    // tests as well as the source (Part 1 excludes its tests because it does
+    // emit a build).
+    "noEmit": true
+  },
+  "include": ["src", "tests"],
+  "exclude": ["node_modules"]
+}

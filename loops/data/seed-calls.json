@@ -1,0 +1,239 @@
+[
+  {
+    "callId": "seed-call-001",
+    "agentVersion": "order-status-v1",
+    "startedAt": "2026-08-01T09:14:02.000Z",
+    "endedAt": "2026-08-01T09:14:31.000Z",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, you've reached the order status line. I can check the status of an order for you — what's your order number?", "timestampMs": 800 },
+      { "speaker": "caller", "text": "I want to return my order", "timestampMs": 5200 },
+      { "speaker": "agent", "text": "That's something our support team handles directly. Let me connect you now.", "timestampMs": 6400 }
+    ],
+    "toolCalls": [],
+    "latency": { "speechToTextMs": 210, "modelMs": 380, "toolMs": 0, "textToSpeechMs": 290, "totalTurnMs": 880 },
+    "fallbackUsed": false,
+    "handoffRequested": true,
+    "handoffReason": "returns",
+    "outcome": "handoff"
+  },
+  {
+    "callId": "seed-call-002",
+    "agentVersion": "order-status-v1",
+    "startedAt": "2026-08-02T11:02:47.000Z",
+    "endedAt": "2026-08-02T11:03:19.000Z",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, you've reached the order status line. What's your order number?", "timestampMs": 750 },
+      { "speaker": "caller", "text": "I need a refund for my order", "timestampMs": 6100 },
+      { "speaker": "agent", "text": "That's something our support team handles directly. Let me connect you now.", "timestampMs": 7300 }
+    ],
+    "toolCalls": [],
+    "latency": { "speechToTextMs": 245, "modelMs": 402, "toolMs": 0, "textToSpeechMs": 310, "totalTurnMs": 957 },
+    "fallbackUsed": false,
+    "handoffRequested": true,
+    "handoffReason": "returns",
+    "outcome": "handoff"
+  },
+  {
+    "callId": "seed-call-003",
+    "agentVersion": "order-status-v1",
+    "startedAt": "2026-08-03T15:38:10.000Z",
+    "endedAt": "2026-08-03T15:38:44.000Z",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, you've reached the order status line. What's your order number?", "timestampMs": 820 },
+      { "speaker": "caller", "text": "Can I exchange this for a different size?", "timestampMs": 7400 },
+      { "speaker": "agent", "text": "That's something our support team handles directly. Let me connect you now.", "timestampMs": 8600 }
+    ],
+    "toolCalls": [],
+    "latency": { "speechToTextMs": 198, "modelMs": 356, "toolMs": 0, "textToSpeechMs": 275, "totalTurnMs": 829 },
+    "fallbackUsed": false,
+    "handoffRequested": true,
+    "handoffReason": "returns",
+    "outcome": "handoff"
+  },
+  {
+    "callId": "seed-call-004",
+    "agentVersion": "order-status-v1",
+    "startedAt": "2026-08-04T08:51:33.000Z",
+    "endedAt": "2026-08-04T08:52:05.000Z",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, you've reached the order status line. What's your order number?", "timestampMs": 790 },
+      { "speaker": "caller", "text": "There is a wrong charge on my invoice", "timestampMs": 5900 },
+      { "speaker": "agent", "text": "That's something our support team handles directly. Let me connect you now.", "timestampMs": 7100 }
+    ],
+    "toolCalls": [],
+    "latency": { "speechToTextMs": 232, "modelMs": 371, "toolMs": 0, "textToSpeechMs": 288, "totalTurnMs": 891 },
+    "fallbackUsed": false,
+    "handoffRequested": true,
+    "handoffReason": "billing",
+    "outcome": "handoff"
+  },
+  {
+    "callId": "seed-call-005",
+    "agentVersion": "order-status-v1",
+    "startedAt": "2026-08-05T13:27:56.000Z",
+    "endedAt": "2026-08-05T13:28:24.000Z",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, you've reached the order status line. What's your order number?", "timestampMs": 760 },
+      { "speaker": "caller", "text": "I need to dispute a payment", "timestampMs": 5400 },
+      { "speaker": "agent", "text": "That's something our support team handles directly. Let me connect you now.", "timestampMs": 6600 }
+    ],
+    "toolCalls": [],
+    "latency": { "speechToTextMs": 219, "modelMs": 344, "toolMs": 0, "textToSpeechMs": 301, "totalTurnMs": 864 },
+    "fallbackUsed": false,
+    "handoffRequested": true,
+    "handoffReason": "billing",
+    "outcome": "handoff"
+  },
+  {
+    "callId": "seed-call-006",
+    "agentVersion": "order-status-v1",
+    "startedAt": "2026-08-06T10:05:12.000Z",
+    "endedAt": "2026-08-06T10:05:51.000Z",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, you've reached the order status line. What's your order number?", "timestampMs": 810 },
+      { "speaker": "caller", "text": "Where is order SLOW999?", "timestampMs": 6200 },
+      { "speaker": "agent", "text": "Let me look that up for you.", "timestampMs": 7400 },
+      { "speaker": "agent", "text": "I'm having trouble retrieving that order right now. Please try again later, or contact our support team and they can help.", "timestampMs": 9100 }
+    ],
+    "toolCalls": [
+      {
+        "tool": "getOrderStatus",
+        "args": { "orderId": "SLOW999" },
+        "durationMs": 1503,
+        "result": "timeout",
+        "success": false
+      }
+    ],
+    "latency": { "speechToTextMs": 241, "modelMs": 389, "toolMs": 1503, "textToSpeechMs": 296, "totalTurnMs": 2429 },
+    "fallbackUsed": true,
+    "handoffRequested": false,
+    "handoffReason": null,
+    "outcome": "fallback"
+  },
+  {
+    "callId": "seed-call-007",
+    "agentVersion": "order-status-v1",
+    "startedAt": "2026-08-07T14:44:38.000Z",
+    "endedAt": "2026-08-07T14:45:20.000Z",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, you've reached the order status line. What's your order number?", "timestampMs": 780 },
+      { "speaker": "caller", "text": "Where is order SLOW123?", "timestampMs": 5800 },
+      { "speaker": "agent", "text": "Let me look that up for you.", "timestampMs": 7000 },
+      { "speaker": "agent", "text": "I'm having trouble retrieving that order right now. Please try again later, or contact our support team and they can help.", "timestampMs": 8700 }
+    ],
+    "toolCalls": [
+      {
+        "tool": "getOrderStatus",
+        "args": { "orderId": "SLOW123" },
+        "durationMs": 1501,
+        "result": "timeout",
+        "success": false
+      }
+    ],
+    "latency": { "speechToTextMs": 228, "modelMs": 412, "toolMs": 1501, "textToSpeechMs": 284, "totalTurnMs": 2425 },
+    "fallbackUsed": true,
+    "handoffRequested": false,
+    "handoffReason": null,
+    "outcome": "fallback"
+  },
+  {
+    "callId": "seed-call-008",
+    "agentVersion": "order-status-v1",
+    "startedAt": "2026-08-08T16:19:04.000Z",
+    "endedAt": "2026-08-08T16:19:47.000Z",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, you've reached the order status line. What's your order number?", "timestampMs": 800 },
+      { "speaker": "caller", "text": "Where is order SLOW456?", "timestampMs": 6600 },
+      { "speaker": "agent", "text": "Let me look that up for you.", "timestampMs": 7800 },
+      { "speaker": "agent", "text": "I'm having trouble retrieving that order right now. Please try again later, or contact our support team and they can help.", "timestampMs": 9500 }
+    ],
+    "toolCalls": [
+      {
+        "tool": "getOrderStatus",
+        "args": { "orderId": "SLOW456" },
+        "durationMs": 1502,
+        "result": "timeout",
+        "success": false
+      }
+    ],
+    "latency": { "speechToTextMs": 253, "modelMs": 397, "toolMs": 1502, "textToSpeechMs": 279, "totalTurnMs": 2431 },
+    "fallbackUsed": true,
+    "handoffRequested": false,
+    "handoffReason": null,
+    "outcome": "fallback"
+  },
+  {
+    "callId": "seed-call-009",
+    "agentVersion": "order-status-v1",
+    "startedAt": "2026-08-09T09:33:21.000Z",
+    "endedAt": "2026-08-09T09:34:16.000Z",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, you've reached the order status line. What's your order number?", "timestampMs": 770 },
+      { "speaker": "caller", "text": "Where is order A1001?", "timestampMs": 5100 },
+      { "speaker": "agent", "text": "Good news — your order is on its way and is estimated to arrive on July 29, 2026.", "timestampMs": 7300 },
+      { "speaker": "caller", "text": "Great, and where is order B2002?", "timestampMs": 14800 },
+      { "speaker": "agent", "text": "I'm having trouble retrieving that order right now. Please try again later, or contact our support team and they can help.", "timestampMs": 16200 }
+    ],
+    "toolCalls": [
+      {
+        "tool": "getOrderStatus",
+        "args": { "orderId": "A1001" },
+        "durationMs": 121,
+        "result": { "status": "in_transit", "estimatedDelivery": "2026-07-29" },
+        "success": true
+      },
+      {
+        "tool": "getOrderStatus",
+        "args": { "orderId": "B2002" },
+        "durationMs": 0,
+        "result": {
+          "status": "error",
+          "reason": "The single allowed tool call has already been made (limit 1)."
+        },
+        "success": false
+      }
+    ],
+    "latency": { "speechToTextMs": 236, "modelMs": 368, "toolMs": 121, "textToSpeechMs": 292, "totalTurnMs": 1017 },
+    "fallbackUsed": true,
+    "handoffRequested": false,
+    "handoffReason": null,
+    "outcome": "fallback"
+  },
+  {
+    "callId": "seed-call-010",
+    "agentVersion": "order-status-v1",
+    "startedAt": "2026-08-10T12:07:45.000Z",
+    "endedAt": "2026-08-10T12:08:39.000Z",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, you've reached the order status line. What's your order number?", "timestampMs": 790 },
+      { "speaker": "caller", "text": "Where is order A1002?", "timestampMs": 4900 },
+      { "speaker": "agent", "text": "That order was delivered on July 24, 2026.", "timestampMs": 7100 },
+      { "speaker": "caller", "text": "And what about order C3003?", "timestampMs": 13400 },
+      { "speaker": "agent", "text": "I'm having trouble retrieving that order right now. Please try again later, or contact our support team and they can help.", "timestampMs": 14900 }
+    ],
+    "toolCalls": [
+      {
+        "tool": "getOrderStatus",
+        "args": { "orderId": "A1002" },
+        "durationMs": 118,
+        "result": { "status": "delivered", "deliveredAt": "2026-07-24T16:42:00Z" },
+        "success": true
+      },
+      {
+        "tool": "getOrderStatus",
+        "args": { "orderId": "C3003" },
+        "durationMs": 0,
+        "result": {
+          "status": "error",
+          "reason": "The single allowed tool call has already been made (limit 1)."
+        },
+        "success": false
+      }
+    ],
+    "latency": { "speechToTextMs": 214, "modelMs": 359, "toolMs": 118, "textToSpeechMs": 287, "totalTurnMs": 978 },
+    "fallbackUsed": true,
+    "handoffRequested": false,
+    "handoffReason": null,
+    "outcome": "fallback"
+  }
+]

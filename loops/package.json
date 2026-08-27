@@ -1,0 +1,29 @@
+{
+  "name": "offline-agent-loops",
+  "version": "1.0.0",
+  "description": "Part 2: offline loops for the bounded order-status voice agent — a regression evaluation runner and a transcript review loop, both reading Part 1's SQLite call records.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "eval": "tsx src/run-eval.ts",
+    "review": "tsx src/run-review.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed-calls": "tsx scripts/seed-more-calls.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

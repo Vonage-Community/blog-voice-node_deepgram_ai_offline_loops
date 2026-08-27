@@ -9,11 +9,19 @@
 node_modules/
 dist/
 
+# Generated eval reports from `npm run eval` — regenerated per run, not evidence
+loops/reports/
+
 # SQLite database files (call evidence is regenerated per run)
 *.db
 *.db-journal
 *.sqlite
 data/
+
+# ...but loops/data/ is committed fixture INPUT, not generated evidence. The
+# `data/` rule above matches at any depth, so the seed file needs an explicit
+# escape or it silently never gets committed.
+!loops/data/
 
 # Logs and OS cruft
 *.log

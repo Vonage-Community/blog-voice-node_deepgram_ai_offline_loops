@@ -1,0 +1,9 @@
+[
+  {
+    "id": "broken-1",
+    "input": "Where is order A1001?",
+    "expectedOutcome": "complted",
+    "expectedFallback": false,
+    "expectedToolCalled": true
+  }
+]

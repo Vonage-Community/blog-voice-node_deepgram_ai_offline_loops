@@ -1,0 +1,8 @@
+[
+  {
+    "id": "broken-2",
+    "expectedOutcome": "completed",
+    "expectedFallback": false,
+    "expectedToolCalled": true
+  }
+]
