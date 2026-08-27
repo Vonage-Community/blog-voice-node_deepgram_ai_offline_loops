@@ -4,6 +4,8 @@
 
 Part 2 of a two-part series. Two CLI loops that read the call records Part 1 writes: a **regression runner** (`npm run eval`) that replays eval cases against the agent's logic and fails on drift, and a **transcript review loop** (`npm run review`) that scans stored calls, finds patterns, and proposes new eval cases for a human to approve. Neither loop opens a socket, calls Deepgram or Vonage, or touches the live voice path — they read and write one SQLite file. **Part 1 must be set up first**; without it there are no call records to read.
 
+Part 1 does not need to be running for the loops to work. The eval runner and review loop read from `data/calls.db` — a file on disk. You only need Part 1 running when you want to make real phone calls to generate new call records (Run 3 in the demo below).
+
 ---
 
 ## Prerequisites
@@ -20,12 +22,20 @@ You do **not** need Vonage or Deepgram credentials here. The loops never call ei
 ## Quick Start
 
 ```bash
+# From the repo root — set up Part 1's environment if you haven't already
+cp .env.example .env
+# fill in VONAGE_APP_ID, VONAGE_PRIVATE_KEY_PATH, DEEPGRAM_API_KEY, BASE_URL
+
+# Then set up the loops environment
 cd loops
+cp .env.example .env
+# defaults are already correct — DB_PATH points at ../data/calls.db
+# which is where Part 1 writes. No API keys needed here.
+
 npm install
-cp .env.example .env   # DB_PATH and AGENT_VERSION already match Part 1 defaults
-npm run seed-calls     # load demo call records (skip if you have real ones)
-npm run eval           # regression suite — should show 4 passing
-npm run review         # find patterns, write proposals
+npm run seed-calls
+npm run eval
+npm run review
 ```
 
 `npm run eval` creates the `eval_cases` table and loads the four seed cases on first run, so there is no separate migration step.
