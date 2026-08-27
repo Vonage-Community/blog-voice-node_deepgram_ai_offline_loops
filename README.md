@@ -16,6 +16,7 @@ The two parts share one SQLite database. Part 1 writes to it during calls. Part 
 ## Part 1: The Live Agent
 
 - **Blog post:** [Add Tools and Human Transfer to a Vonage + Deepgram Voice Agent](https://developer.vonage.com/en/blog/) *(link to be added when published)*
+- **Part 1 repo:** [Vonage-Community/blog-voice-node_deepgram_ai_tools](https://github.com/Vonage-Community/blog-voice-node_deepgram_ai_tools) — the live agent on its own, with its full setup guide
 - **Prerequisite guide:** [How to Build an AI Voice Agent with Vonage Voice API and Deepgram](https://developer.vonage.com/en/voice/voice-api/guides/voice-ai-agent-deepgram) — Part 1 builds directly on top of it
 
 ### The Live-Path Contract
@@ -36,7 +37,7 @@ This table is the architectural core of the tutorial. Every implementation decis
 
 The narrow system prompt, the exact fallback/handoff strings, and the call-record schema are pinned in [`AGENTS.md`](AGENTS.md) — the spec for this repo.
 
-For full setup instructions — Vonage application, ngrok, environment variables, and the three test calls — see the [Part 1 tutorial](https://developer.vonage.com/en/blog/) or [`docs/live-call-checklist.md`](docs/live-call-checklist.md).
+For full setup instructions — Vonage application, ngrok, environment variables, and the three test calls — see the [Part 1 tutorial](https://developer.vonage.com/en/blog/), the [Part 1 repo](https://github.com/Vonage-Community/blog-voice-node_deepgram_ai_tools), or [`docs/live-call-checklist.md`](docs/live-call-checklist.md).
 
 ---
 
@@ -102,6 +103,7 @@ MIT
 ## Related
 
 - [How to Build an AI Voice Agent with Vonage Voice API and Deepgram](https://developer.vonage.com/en/voice/voice-api/guides/voice-ai-agent-deepgram) — the prerequisite guide
+- [Vonage-Community/blog-voice-node_deepgram_ai_tools](https://github.com/Vonage-Community/blog-voice-node_deepgram_ai_tools) — the Part 1 repo
 - [Vonage Voice API / NCCO reference](https://developer.vonage.com/en/voice/voice-api/ncco-reference)
 - [Deepgram Voice Agent API](https://developers.deepgram.com/docs/voice-agent)
 - [Blog Post](https://developer.vonage.com/en/blog/) *(link to be added when published)*
