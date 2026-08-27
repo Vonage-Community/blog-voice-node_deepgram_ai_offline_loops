@@ -120,7 +120,7 @@ npm run eval
 
 ### Run 3 — After real phone calls
 
-Start Part 1 from the repo root and make three calls:
+Make three calls to your running Part 1 agent (`npm run dev` at the repo root):
 
 ```bash
 cd ..
@@ -129,13 +129,13 @@ npm run dev
 
 | Call | What to say | What it generates |
 | --- | --- | --- |
-| 1 | "I want to return my order" | `outcome: handoff`, `handoff_reason: returns` |
-| 2 | "Where is order S-L-O-W nine nine nine?" | `outcome: fallback`, `"result":"timeout"` in `tool_calls` |
-| 3 | "Where is order A1001?" | `outcome: completed` |
+| 1 | "Where is order A1001?" | `outcome: completed` — working correctly |
+| 2 | "I want to return my order" | `outcome: handoff`, `handoff_reason: returns` |
+| 3 | "I want to cancel my order" | `outcome: handoff`, `handoff_reason: cancellation` |
 
-> Make each one a **separate call**. The contract allows one `getOrderStatus` per call, so a second lookup in the same call is blocked and falls back — correct behaviour, but not the timeout you meant to test. And enunciate `SLOW`; the ASR has to actually produce that prefix.
+> Make each one a **separate call**. Calls 2 and 3 both hand off, and a handoff transfers you to a human — that call is over. Dial again for the next one.
 
-Inspect the new records:
+Then inspect the new records:
 
 ```bash
 sqlite3 ../data/calls.db \
@@ -143,14 +143,22 @@ sqlite3 ../data/calls.db \
    FROM call_records ORDER BY started_at DESC LIMIT 3;"
 ```
 
-Then:
+Then run the review loop:
 
 ```bash
 cd loops
 npm run review
-# real calls + synthetic data feed the same loop
+```
+
+Call 1 completed cleanly — the loop finds no pattern worth proposing and moves on. That's intentional. A good loop is selective, not noisy.
+
+Calls 2 and 3 both ended in handoffs, but for different reasons. The review loop surfaces them as separate proposals because they would need separate fixes — a returns capability is a different integration than a cancellation flow. Two proposals, two decisions for the reviewer to make.
+
+If you followed Part 1 before starting this tutorial, A1001 is already in your database. The loop will still find nothing to propose for it. The calls that matter here are the returns and cancellation requests.
+
+```bash
 npm run eval
-# stable until you approve something
+# stable — no new approvals yet
 ```
 
 The review loop cannot tell the difference between a record from a real phone call and one from the seed script — it reads the same columns either way.

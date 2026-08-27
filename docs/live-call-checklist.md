@@ -17,7 +17,7 @@ VONAGE_PRIVATE_KEY_PATH=./vonage_private.key   # must match your actual key file
 DEEPGRAM_API_KEY=
 BASE_URL=https://your-ngrok-url.ngrok.io       # ← the one that bites everyone
 PORT=3000
-DB_PATH=./calls.db
+DB_PATH=./data/calls.db
 ```
 
 `BASE_URL` is the one most likely to be wrong. It must be the full ngrok `https://`
@@ -71,7 +71,7 @@ The SQLite **columns are snake_case** (the camelCase names are the TypeScript/JS
 field names, not the DB columns):
 
 ```bash
-sqlite3 calls.db \
+sqlite3 data/calls.db \
   "SELECT call_id, outcome, fallback_used, handoff_requested
    FROM call_records ORDER BY started_at DESC LIMIT 3;"
 ```
@@ -79,7 +79,7 @@ sqlite3 calls.db \
 `tool_calls` is a JSON column, so drill into it with `json_extract`. For call 2:
 
 ```bash
-sqlite3 calls.db \
+sqlite3 data/calls.db \
   "SELECT json_extract(tool_calls, '\$[0].result') AS tool_result
    FROM call_records WHERE call_id = '<call-2-uuid>';"
 # -> "timeout"
@@ -121,3 +121,13 @@ webhook.
   Both the Vonage socket close and the event-webhook `onCallEnded` path route through
   the same idempotent `finalize()`; the `Map<callUuid, CallSession>` in `server.ts` is
   the bridge between them.
+
+## Using These Records With Part 2
+
+If you complete Part 1 and then follow Part 2, the calls you made here will already be
+in `data/calls.db`. The Part 2 review loop will see them alongside the synthetic seed
+data. The A1001 completed call will not generate a proposal — it is working correctly.
+If you made a dispute call (call 3), that will contribute to the billing handoff pattern.
+
+For Part 2's demo, the new calls worth making are a returns request and a cancellation
+request. See the [Part 2 README](../loops/README.md) for the full three-run demo.
