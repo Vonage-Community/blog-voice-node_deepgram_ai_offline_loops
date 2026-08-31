@@ -2,7 +2,7 @@
 // The transcript review loop — read stored calls, propose eval cases, stop.
 //
 // Its only side effect is writing rows to `eval_cases` with
-// `status = 'awaiting_review'`. It never approves anything, never edits an
+// `status = 'pending'`. It never adds anything to the suite, never edits an
 // existing case, and never touches a prompt, a tool, or any live configuration.
 // The loop proposes; humans decide. That boundary is the reason this is safe to
 // run against the production database while a call is in progress.
@@ -86,9 +86,9 @@ export function reviewTranscripts(
       expectedFallback: pattern.expected.fallback,
       expectedToolCalled: pattern.expected.toolCalled,
       mockToolResult: pattern.expected.mockToolResult,
-      // Never anything else. A loop that can approve its own proposals is a loop
-      // that can change what "correct" means without a human in the room.
-      status: "awaiting_review",
+      // Never anything else. A loop that can add its own proposals to the suite
+      // is a loop that can change what "correct" means without a human in the room.
+      status: "pending",
       notes: pattern.description,
       // The one representative call keeps `source_call_id` meaningful; the whole
       // group is the evidence a reviewer needs to judge the proposal.
@@ -143,11 +143,11 @@ export function readRecentCalls(db: DatabaseType, limit: number): CallRecord[] {
 /**
  * Is this pattern already covered by a case a human has seen?
  *
- * Two statuses count as covered. `awaiting_review` is the rule as specified:
- * do not stack duplicates in a queue somebody has not worked through yet.
- * `approved` is the same argument one step later — the case is already in the
- * suite, so re-proposing it is pure noise. Only `rejected` lets a pattern come
- * back, and that is deliberate: a human said "not this", and if the behaviour
+ * Two statuses count as covered. `pending` is the rule as specified: do not
+ * stack duplicates in a queue somebody has not worked through yet. `added` is
+ * the same argument one step later — the case is already in the suite, so
+ * re-proposing it is pure noise. Only `dismissed` lets a pattern come back, and
+ * that is deliberate: a human said "not now", and if the behaviour
  * keeps happening they should get the chance to say it again with fresh
  * evidence rather than have the loop quietly agree with them forever.
  *
@@ -159,7 +159,7 @@ function existingCoverage(db: DatabaseType, pattern: Pattern): string | null {
   const row = db
     .prepare(
       `SELECT id, status FROM eval_cases
-        WHERE input = ? AND expected_outcome = ? AND status IN ('awaiting_review', 'approved')
+        WHERE input = ? AND expected_outcome = ? AND status IN ('pending', 'added')
         LIMIT 1`,
     )
     .get(pattern.input, pattern.expected.outcome) as
@@ -167,8 +167,8 @@ function existingCoverage(db: DatabaseType, pattern: Pattern): string | null {
     | undefined;
 
   if (!row) return null;
-  return row.status === "approved"
-    ? `already covered by approved case ${row.id}`
+  return row.status === "added"
+    ? `already covered by case ${row.id} in the suite`
     : `already proposed as ${row.id}`;
 }
 
@@ -177,8 +177,8 @@ function existingCoverage(db: DatabaseType, pattern: Pattern): string | null {
  *
  * The timestamp makes the id look unique. It is not, in two ways, and both are
  * reachable: two patterns of the same type inside one run share the millisecond,
- * and a re-proposal after a rejection regenerates the same base id as the
- * rejected row still sitting in the table. Either way `insertEvalCase` would hit
+ * and a re-proposal after a dismissal regenerates the same base id as the
+ * dismissed row still sitting in the table. Either way `insertEvalCase` would hit
  * ON CONFLICT DO NOTHING and drop the proposal in silence, so the check covers
  * both this run and what is already stored.
  */
@@ -247,12 +247,12 @@ export function formatReviewSummary(
     } written — review with:`);
     lines.push(
       `  sqlite3 ${dbPath} \\\n    "SELECT id, notes, status FROM eval_cases ` +
-        `WHERE status = 'awaiting_review';"`,
+        `WHERE status = 'pending';"`,
     );
     lines.push("");
-    lines.push("Approve a proposal:");
+    lines.push("Add one to the suite:");
     lines.push(
-      `  sqlite3 ${dbPath} \\\n    "UPDATE eval_cases SET status = 'approved' ` +
+      `  sqlite3 ${dbPath} \\\n    "UPDATE eval_cases SET status = 'added' ` +
         `WHERE id = '${firstProposalId(summary)}';"`,
     );
   }

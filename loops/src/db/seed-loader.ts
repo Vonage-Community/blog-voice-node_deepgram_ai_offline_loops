@@ -74,7 +74,7 @@ export function loadSeedCases(
         ...seed,
         createdAt,
         sourceCallId: null, // hand-authored: no call produced this
-        status: "approved", // seeds are pre-approved by definition
+        status: "added", // hand-authored: they start in the suite
         notes: seed.notes ?? null,
       });
       (written ? inserted : skipped).push(seed.id);

@@ -47,7 +47,7 @@ Part 1 leaves behind a row per call: the transcript, the tool call and its resul
 
 **The regression runner (`npm run eval`)** replays stored evaluation cases against the agent's real decision logic — the same `classifyHandoffReason` and tool policy the live path uses — with the tool's answer injected instead of fetched. No phone call, no WebSocket, no Deepgram. It compares what the agent *would* do against what the case says it *should* do, prints a pass/fail line per case, writes a JSON report, and exits non-zero on any failure, so a regression fails a build.
 
-**The transcript review loop (`npm run review`)** reads the recent call window and looks for four things: a handoff reason that keeps recurring, tool timeouts, callers asking for a human, and fallbacks that weren't timeouts. Where it finds evidence, it writes a proposed evaluation case with `status = 'awaiting_review'` and the contributing call IDs attached. It never approves its own proposals, never edits an existing case, and never touches a prompt or a tool. Pattern detection is deterministic — structured columns only, no model call anywhere in the loop.
+**The transcript review loop (`npm run review`)** reads the recent call window and looks for four things: a handoff reason that keeps recurring, tool timeouts, callers asking for a human, and fallbacks that weren't timeouts. Where it finds evidence, it writes a proposed evaluation case with `status = 'pending'` and the contributing call IDs attached. It never adds its own proposals to the suite, never edits an existing case, and never touches a prompt or a tool. Pattern detection is deterministic — structured columns only, no model call anywhere in the loop.
 
 Together they close a cycle: real calls become evidence, evidence becomes a proposal, a human approves it, and the suite is one case larger the next time it runs.
 
@@ -59,7 +59,7 @@ npm run seed-calls     # load demo call records
 npm run eval           # 4 cases pass
 npm run review         # finds patterns, writes proposals
 sqlite3 ../data/calls.db \
-  "UPDATE eval_cases SET status = 'approved' WHERE id = 'proposal-xxx';"
+  "UPDATE eval_cases SET status = 'added' WHERE id = 'proposal-xxx';"
 npm run eval           # 5 cases pass — suite grew
 ```
 

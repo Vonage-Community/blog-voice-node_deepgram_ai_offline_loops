@@ -17,7 +17,7 @@ function evalCase(overrides: Partial<EvalCase> = {}): EvalCase {
     expectedFallback: false,
     expectedToolCalled: true,
     mockToolResult: { status: "in_transit", estimatedDelivery: "2026-07-29" },
-    status: "approved",
+    status: "added",
     notes: null,
     sourceCallIds: null,
     ...overrides,

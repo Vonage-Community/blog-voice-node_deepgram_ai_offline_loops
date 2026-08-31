@@ -109,10 +109,7 @@ function findRepeatedHandoffReasons(records: CallRecord[]): Pattern[] {
     patterns.push({
       type: "handoff-reason",
       label: `${reason} handoff`,
-      description:
-        `${group.length} calls handed off with reason "${reason}". ` +
-        "Proposed so the eval suite pins down that this class of request transfers " +
-        "to a human instead of reaching the order tool.",
+      description: describeHandoff(reason, group.length),
       input,
       callIds: group.map((r) => r.callId),
       expected: {
@@ -145,9 +142,8 @@ function findTimeoutPattern(records: CallRecord[]): Pattern[] {
       type: "timeout",
       label: "timeout pattern",
       description:
-        `${timedOut.length} calls hit the ${TOOL_TIMEOUT_MS}ms tool deadline and fell back. ` +
-        "Proposed so the eval suite pins down that a timeout speaks the fallback " +
-        "and is never retried or narrated as a result.",
+        `${timedOut.length} calls waited too long for the order lookup and got the ` +
+        `fallback. Is ${TOOL_TIMEOUT_MS}ms the right timeout, or is the upstream slow?`,
       input: orderQuestion(orderId),
       callIds: timedOut.map((r) => r.callId),
       expected: {
@@ -193,9 +189,9 @@ function findUnansweredQuestions(records: CallRecord[]): Pattern[] {
     type: "unanswered" as const,
     label: `unanswered question (${truncate(utterance)})`,
     description:
-      `${group.length} call(s) asked "${utterance}" and were classified ` +
-      '"unsupported" — the agent had no answer and transferred. Proposed so the ' +
-      "eval suite records what this agent is expected not to handle.",
+      `${callers(group.length)} asked for something outside this agent's scope ` +
+      `and got transferred: ${quoteUtterance(utterance)} Keep transferring, or ` +
+      "build support for it?",
     input: utterance,
     callIds: group.map((r) => r.callId),
     expected: {
@@ -232,11 +228,8 @@ function findBlockedFallbacks(records: CallRecord[]): Pattern[] {
       type: "blocked-fallback",
       label: "fallback without timeout",
       description:
-        `${blocked.length} calls fell back with no tool timeout — the lookup was ` +
-        "refused by the tool policy (one call per conversation), not slow. Callers " +
-        "are asking about a second order on the same call. Proposed as a normal " +
-        "single-lookup case; the multi-lookup behaviour itself is a product " +
-        "decision for a human, not something an eval case can assert.",
+        `${callers(blocked.length)} asked about a second order in the same call and ` +
+        "hit the one-lookup limit. Should this agent support multiple lookups per call?",
       input: orderQuestion(orderId),
       callIds: blocked.map((r) => r.callId),
       expected: {
@@ -250,6 +243,61 @@ function findBlockedFallbacks(records: CallRecord[]): Pattern[] {
       },
     },
   ];
+}
+
+// --- Note templates ---------------------------------------------------------
+//
+// These strings end up in `notes`, which is the only thing a reviewer reads
+// before deciding. They are written as two sentences: what the callers did, and
+// the question the reviewer actually has to answer. Not "proposed so the eval
+// suite pins down that this class of request transfers to a human" — that
+// describes the machinery, and the person reading it already knows what the
+// review loop is for. What they do not know is whether this behaviour is one
+// they want to keep.
+
+/** "1 caller" / "4 callers" — notes read as sentences, so the count agrees. */
+function callers(count: number): string {
+  return `${count} caller${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * Quote a caller utterance mid-sentence, ending the sentence exactly once.
+ *
+ * Transcribed speech usually arrives already punctuated ("Transfer to a
+ * human."), so appending our own full stop after the closing quote produces
+ * `"Transfer to a human.".` — small, but it is the first thing a reviewer reads.
+ */
+function quoteUtterance(utterance: string): string {
+  const terminated = /[.!?]$/.test(utterance);
+  return `"${utterance}${terminated ? "" : "."}"`;
+}
+
+/**
+ * How the handoff reasons read in a sentence. `unsupported` is missing on
+ * purpose: it is the catch-all bucket, so "asked about unsupported" is nonsense
+ * and it gets its own phrasing below.
+ */
+const REASON_PHRASES: Record<string, string> = {
+  billing: "billing",
+  returns: "returns",
+  cancellation: "cancellations",
+  account: "their account",
+};
+
+/** The note for a repeated handoff reason — the reviewer's question, not ours. */
+function describeHandoff(reason: string, count: number): string {
+  if (reason === "unsupported") {
+    return (
+      `${callers(count)} asked for something outside this agent's scope and got ` +
+      "transferred. Keep transferring, or build support for it?"
+    );
+  }
+
+  const phrase = REASON_PHRASES[reason] ?? reason;
+  return (
+    `${callers(count)} asked about ${phrase} and got transferred. Is transferring ` +
+    `the right behavior, or should this agent handle ${phrase}?`
+  );
 }
 
 // --- Shared helpers ---------------------------------------------------------

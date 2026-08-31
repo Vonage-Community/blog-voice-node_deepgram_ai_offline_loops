@@ -33,7 +33,7 @@ function review(options: { windowSize?: number } = {}): ReviewSummary {
 }
 
 function proposals() {
-  return listEvalCases(db, "awaiting_review");
+  return listEvalCases(db, "pending");
 }
 
 describe("reviewTranscripts — nothing to review", () => {
@@ -70,7 +70,7 @@ describe("reviewTranscripts — 1. repeated handoff reasons", () => {
       expectedHandoffReason: "billing",
       expectedFallback: false,
       expectedToolCalled: false,
-      status: "awaiting_review",
+      status: "pending",
     });
     expect(proposal?.mockToolResult).toBeNull();
   });
@@ -203,7 +203,10 @@ describe("reviewTranscripts — 4. fallbacks that were not timeouts", () => {
       expectedFallback: false,
       expectedToolCalled: true,
     });
-    expect(proposals()[0]?.notes).toContain("refused by the tool policy");
+    // The note has to leave the reviewer with the decision, not a restatement of
+    // what the detector did — that question is the whole reason it is in a queue.
+    expect(proposals()[0]?.notes).toContain("hit the one-lookup limit");
+    expect(proposals()[0]?.notes).toContain("Should this agent support multiple lookups");
   });
 
   it("does not count timed-out calls as blocked fallbacks", () => {
@@ -245,7 +248,7 @@ describe("reviewTranscripts — idempotency", () => {
     expect(second.outcomes[0]?.skippedReason).toMatch(/already proposed as proposal-/);
   });
 
-  it("re-proposes a pattern a human rejected, with fresh evidence", () => {
+  it("re-proposes a pattern a human dismissed, with fresh evidence", () => {
     seedCalls(db, [
       handoffCall("c1", "billing", "I want to dispute a charge"),
       handoffCall("c2", "billing", "Wrong charge"),
@@ -253,7 +256,7 @@ describe("reviewTranscripts — idempotency", () => {
 
     review();
     const [original] = proposals();
-    db.prepare("UPDATE eval_cases SET status = 'rejected' WHERE id = ?").run(original!.id);
+    db.prepare("UPDATE eval_cases SET status = 'dismissed' WHERE id = ?").run(original!.id);
 
     const second = review();
 
@@ -261,11 +264,11 @@ describe("reviewTranscripts — idempotency", () => {
     expect(proposals()).toHaveLength(1);
     expect(proposals()[0]?.id).not.toBe(original!.id);
     // The rejection stands; the new proposal sits beside it.
-    expect(getEvalCase(db, original!.id)?.status).toBe("rejected");
+    expect(getEvalCase(db, original!.id)?.status).toBe("dismissed");
   });
 
-  it("does not re-propose something a human already approved", () => {
-    // The rule as specified only names awaiting_review. Approved is the same
+  it("does not re-propose something a human already added", () => {
+    // The rule as specified only names pending. Added is the same
     // argument one step later: the case is already in the suite, so proposing it
     // again is noise in a queue meant for new information.
     insertEvalCase(db, {
@@ -276,7 +279,7 @@ describe("reviewTranscripts — idempotency", () => {
       expectedHandoffReason: "billing",
       expectedFallback: false,
       expectedToolCalled: false,
-      status: "approved",
+      status: "added",
     });
     seedCalls(db, [
       handoffCall("c1", "billing", "I want to dispute a charge"),
@@ -287,7 +290,7 @@ describe("reviewTranscripts — idempotency", () => {
 
     expect(summary.proposalsWritten).toBe(0);
     expect(summary.outcomes[0]?.skippedReason).toBe(
-      "already covered by approved case seed-004",
+      "already covered by case seed-004 in the suite",
     );
   });
 
@@ -358,8 +361,8 @@ describe("formatReviewSummary", () => {
     expect(text).toContain('Input: "I want to dispute a charge"');
     expect(text).toContain("Expected: handoff (billing)");
     expect(text).toContain("1 proposal written — review with:");
-    expect(text).toContain("WHERE status = 'awaiting_review';");
-    expect(text).toContain("UPDATE eval_cases SET status = 'approved'");
+    expect(text).toContain("WHERE status = 'pending';");
+    expect(text).toContain("UPDATE eval_cases SET status = 'added'");
   });
 
   it("says plainly when a run wrote nothing", () => {

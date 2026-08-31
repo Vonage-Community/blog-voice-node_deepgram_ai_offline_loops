@@ -85,7 +85,7 @@ describe("npm run eval", () => {
   it("exits 1 when a case fails, so CI catches the regression", async () => {
     const ws = workspace();
 
-    // An approved case that cannot pass: an order-status question expected to
+    // A case in the suite that cannot pass: an order-status question expected to
     // hand off. Replay will complete it instead.
     const db = openEvalDatabase(ws.dbPath);
     insertEvalCase(db, {
@@ -96,7 +96,7 @@ describe("npm run eval", () => {
       expectedHandoffReason: "billing",
       expectedFallback: false,
       expectedToolCalled: false,
-      status: "approved",
+      status: "added",
       notes: "deliberately wrong expectation",
     });
     db.close();
@@ -114,11 +114,11 @@ describe("npm run eval", () => {
     expect(failure?.failureReason).toBe('expected outcome "handoff", got "completed"');
   }, 30_000);
 
-  it("ignores cases that are not approved", async () => {
+  it("ignores cases that are not in the suite", async () => {
     const ws = workspace();
 
     const db = openEvalDatabase(ws.dbPath);
-    // A proposal the review loop would have written, and a rejected case. A
+    // A proposal the review loop would have written, and a dismissed case. A
     // failing proposal must not be able to break the build before a human has
     // agreed it is a real expectation.
     insertEvalCase(db, {
@@ -128,16 +128,16 @@ describe("npm run eval", () => {
       expectedOutcome: "handoff",
       expectedFallback: false,
       expectedToolCalled: false,
-      status: "awaiting_review",
+      status: "pending",
     });
     insertEvalCase(db, {
-      id: "rejected-001",
+      id: "dismissed-001",
       createdAt: "2026-08-27T09:00:00.000Z",
       input: "Where is order A1001?",
       expectedOutcome: "fallback",
       expectedFallback: true,
       expectedToolCalled: true,
-      status: "rejected",
+      status: "dismissed",
     });
     db.close();
 
@@ -146,16 +146,16 @@ describe("npm run eval", () => {
     expect(code).toBe(0);
     expect(stdout).toContain("4 passed, 0 failed");
     expect(stdout).not.toContain("proposal-001");
-    expect(stdout).not.toContain("rejected-001");
+    expect(stdout).not.toContain("dismissed-001");
   }, 30_000);
 
-  it("says so when the approved suite is empty instead of reporting a green run", async () => {
+  it("says so when the suite is empty instead of reporting a green run", async () => {
     const ws = workspace();
 
-    // Seed, then reject everything — an empty approved suite.
+    // Seed, then dismiss everything — an empty suite.
     await runCli(ws);
     const db = openEvalDatabase(ws.dbPath);
-    db.prepare("UPDATE eval_cases SET status = 'rejected'").run();
+    db.prepare("UPDATE eval_cases SET status = 'dismissed'").run();
     db.close();
     rmSync(ws.reportsDir, { recursive: true, force: true });
 
@@ -163,7 +163,7 @@ describe("npm run eval", () => {
 
     expect(code).toBe(0);
     expect(stdout).toContain("0 passed, 0 failed");
-    expect(stdout).toContain("No approved eval cases found");
+    expect(stdout).toContain("No eval cases in the suite");
     expect(readOnlyReport(ws.reportsDir).totalCases).toBe(0);
   }, 30_000);
 });

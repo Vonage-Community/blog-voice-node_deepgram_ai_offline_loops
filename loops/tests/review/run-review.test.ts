@@ -76,14 +76,14 @@ describe("npm run review", () => {
     expect(stdout).toContain("1 proposal written — review with:");
 
     const db = openDatabase(dbPath);
-    const written = listEvalCases(db, "awaiting_review");
+    const written = listEvalCases(db, "pending");
     db.close();
 
     expect(written).toHaveLength(1);
     expect(written[0]).toMatchObject({
       expectedOutcome: "handoff",
       expectedHandoffReason: "billing",
-      status: "awaiting_review",
+      status: "pending",
     });
   }, 30_000);
 
@@ -145,6 +145,6 @@ describe("npm run review", () => {
     db.close();
 
     expect(all).toHaveLength(1);
-    expect(all[0]?.status).toBe("awaiting_review");
+    expect(all[0]?.status).toBe("pending");
   }, 30_000);
 });

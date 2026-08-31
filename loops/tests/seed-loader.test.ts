@@ -92,12 +92,12 @@ describe("readSeedCasesFile", () => {
 });
 
 describe("loadSeedCases", () => {
-  it("loads the committed seed cases as approved", () => {
+  it("loads the committed seed cases as added", () => {
     const result = loadSeedCases(db, { now: NOW });
 
     expect(result.inserted).toEqual(["seed-001", "seed-002", "seed-003", "seed-004"]);
     expect(result.skipped).toEqual([]);
-    expect(listEvalCases(db, "approved")).toHaveLength(4);
+    expect(listEvalCases(db, "added")).toHaveLength(4);
   });
 
   it("stamps created_at and leaves source_call_id null — nobody called in for these", () => {
@@ -106,7 +106,7 @@ describe("loadSeedCases", () => {
 
     expect(stored?.createdAt).toBe(NOW);
     expect(stored?.sourceCallId).toBeNull();
-    expect(stored?.status).toBe("approved");
+    expect(stored?.status).toBe("added");
   });
 
   it("preserves the mock tool result and handoff reason of each case", () => {
@@ -133,10 +133,10 @@ describe("loadSeedCases", () => {
     loadSeedCases(db, { cases: fixtures, now: NOW });
 
     // A human decides fixture-1 is not worth regressing against.
-    db.prepare("UPDATE eval_cases SET status = 'rejected' WHERE id = 'fixture-1'").run();
+    db.prepare("UPDATE eval_cases SET status = 'dismissed' WHERE id = 'fixture-1'").run();
     loadSeedCases(db, { cases: fixtures, now: NOW });
 
-    expect(getEvalCase(db, "fixture-1")?.status).toBe("rejected");
+    expect(getEvalCase(db, "fixture-1")?.status).toBe("dismissed");
     expect(getEvalCase(db, "fixture-1")?.createdAt).toBe(NOW);
   });
 

@@ -30,12 +30,16 @@ import { dirname } from "node:path";
 export type ExpectedOutcome = "completed" | "fallback" | "handoff" | "error";
 
 /**
- * Where a case sits in the approval workflow.
- *  - `approved`        — the regression runner will replay it
- *  - `awaiting_review` — the review loop proposed it; a human must approve it first
- *  - `rejected`        — a human looked at it and said no
+ * Where a case sits in the review workflow.
+ *  - `added`     — it is in the regression suite; `npm run eval` replays it
+ *  - `pending`   — the review loop proposed it and a human has not decided yet
+ *  - `dismissed` — a human looked and said not now
+ *
+ * The names are written for the person reading `SELECT status FROM eval_cases`
+ * at 9am, not for the code. "Is it in the suite?" is the only question anyone
+ * actually asks of this column, and `added` answers it without a glossary.
  */
-export type EvalCaseStatus = "approved" | "awaiting_review" | "rejected";
+export type EvalCaseStatus = "added" | "pending" | "dismissed";
 
 /**
  * Stored in `mock_tool_result` to mean "the 1500ms deadline fired on this one".
@@ -146,14 +150,14 @@ CREATE TABLE IF NOT EXISTS eval_cases (
   expected_tool_called    INTEGER NOT NULL DEFAULT 1
     CHECK (expected_tool_called IN (0, 1)),
   mock_tool_result        TEXT,            -- JSON OrderResult, "__timeout__", or null
-  status                  TEXT NOT NULL DEFAULT 'approved'
-    CHECK (status IN ('approved', 'awaiting_review', 'rejected')),
+  status                  TEXT NOT NULL DEFAULT 'added'
+    CHECK (status IN ('added', 'pending', 'dismissed')),
   notes                   TEXT,            -- human-readable explanation
   source_call_ids         TEXT             -- JSON array of contributing call ids
 );
 
--- Both loops filter on status: the runner wants 'approved', the review loop
--- checks what is already 'awaiting_review' before proposing a duplicate.
+-- Both loops filter on status: the runner wants 'added', the review loop checks
+-- what is already 'pending' before proposing a duplicate.
 CREATE INDEX IF NOT EXISTS idx_eval_cases_status ON eval_cases (status);
 `;
 
@@ -167,6 +171,87 @@ CREATE INDEX IF NOT EXISTS idx_eval_cases_status ON eval_cases (status);
 const ADDED_COLUMNS: ReadonlyArray<readonly [string, string]> = [
   ["source_call_ids", "TEXT"],
 ];
+
+/**
+ * The status renaming, oldest name to newest.
+ *
+ * `approved`/`awaiting_review`/`rejected` were named after what the *code* does
+ * with a row. These are named after what a person means. Anyone who ran the
+ * loops before the rename has rows carrying the old words.
+ */
+const STATUS_RENAMES: ReadonlyArray<readonly [string, string]> = [
+  ["approved", "added"],
+  ["awaiting_review", "pending"],
+  ["rejected", "dismissed"],
+];
+
+/**
+ * Rewrite a pre-rename `eval_cases` table in place, translating the three status
+ * values on the way through.
+ *
+ * The obvious implementation — three UPDATE statements — cannot work, and it
+ * fails in a way worth understanding before you reach for it. `CREATE TABLE IF
+ * NOT EXISTS` is a no-op against a database that already has the table, so an
+ * existing file still carries the *old* CHECK constraint:
+ *
+ *   CHECK (status IN ('approved', 'awaiting_review', 'rejected'))
+ *
+ * `UPDATE ... SET status = 'added'` violates it and throws. There is no ordering
+ * of updates that escapes this, and SQLite has no `ALTER TABLE ... DROP
+ * CONSTRAINT` — a CHECK can only be changed by rebuilding the table.
+ *
+ * So: build the new table, copy the rows through a CASE that renames as it goes,
+ * swap. No row ever has to satisfy both constraints at once, because the old
+ * rows are only ever *read* under the old constraint and only ever *written*
+ * under the new one. This is SQLite's own documented procedure for altering a
+ * constraint, minus the steps this table does not need (no foreign keys pointing
+ * at it, no triggers, no views).
+ */
+function migrateStatusNames(db: DatabaseType): void {
+  const table = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'eval_cases'")
+    .get() as { sql: string } | undefined;
+
+  // Only a table whose stored DDL still names an old value needs rebuilding.
+  // On a fresh database SCHEMA already created the new shape, and this is a
+  // no-op — which is what makes it safe to run on every single open.
+  if (!table || !STATUS_RENAMES.some(([from]) => table.sql.includes(`'${from}'`))) return;
+
+  const renameCase = `CASE status ${STATUS_RENAMES.map(
+    ([from, to]) => `WHEN '${from}' THEN '${to}'`,
+  ).join(" ")} ELSE status END`;
+
+  // The scratch table is derived from SCHEMA rather than spelled out again, so a
+  // future column cannot be added to one and forgotten in the other. Only the
+  // CREATE TABLE is wanted; the index is recreated by name after the swap.
+  const scratchTable = SCHEMA.slice(0, SCHEMA.indexOf("CREATE INDEX")).replace(
+    "IF NOT EXISTS eval_cases",
+    "eval_cases_migrated",
+  );
+
+  // One transaction: a half-swapped table is a lost eval suite.
+  db.transaction(() => {
+    // A previous run that died mid-migration would leave this behind, and
+    // `IF NOT EXISTS` would then quietly copy into a populated table.
+    db.exec("DROP TABLE IF EXISTS eval_cases_migrated");
+    db.exec(scratchTable);
+    db.exec(`
+      INSERT INTO eval_cases_migrated
+        (id, source_call_id, created_at, input, expected_outcome, expected_handoff_reason,
+         expected_fallback, expected_tool_called, mock_tool_result, status, notes,
+         source_call_ids)
+      SELECT
+         id, source_call_id, created_at, input, expected_outcome, expected_handoff_reason,
+         expected_fallback, expected_tool_called, mock_tool_result, ${renameCase}, notes,
+         source_call_ids
+      FROM eval_cases
+    `);
+    db.exec("DROP TABLE eval_cases");
+    db.exec("ALTER TABLE eval_cases_migrated RENAME TO eval_cases");
+    // The index belonged to the dropped table and went with it.
+    db.exec("CREATE INDEX IF NOT EXISTS idx_eval_cases_status ON eval_cases (status)");
+  })();
+}
 
 /** Create the eval_cases table if it does not exist. Safe to call on every run. */
 export function ensureEvalSchema(db: DatabaseType): void {
@@ -182,6 +267,10 @@ export function ensureEvalSchema(db: DatabaseType): void {
       db.exec(`ALTER TABLE eval_cases ADD COLUMN ${name} ${definition}`);
     }
   }
+
+  // After the column backfill, so the rebuild copies a table that already has
+  // every column the new DDL declares.
+  migrateStatusNames(db);
 }
 
 /**
@@ -214,7 +303,7 @@ export function openEvalDatabase(dbPath: string): DatabaseType {
  * First: an existing row always wins — no `OR REPLACE`. Both the seed loader and
  * the proposal writer run repeatedly against a database a human has been
  * editing. If you approve proposal-001 today and the loop overwrites it back to
- * `awaiting_review` tomorrow, that is silent data loss on a schedule.
+ * `pending` tomorrow, that is silent data loss on a schedule.
  *
  * Second: `ON CONFLICT(id) DO NOTHING`, *not* `INSERT OR IGNORE`, which is the
  * obvious way to write this and is wrong here. `OR IGNORE` skips a row that
@@ -246,7 +335,7 @@ export function insertEvalCase(db: DatabaseType, evalCase: NewEvalCase): boolean
       expectedFallback: evalCase.expectedFallback ? 1 : 0,
       expectedToolCalled: evalCase.expectedToolCalled ? 1 : 0,
       mockToolResult: serializeMockToolResult(evalCase.mockToolResult ?? null),
-      status: evalCase.status ?? "approved",
+      status: evalCase.status ?? "added",
       notes: evalCase.notes ?? null,
       sourceCallIds: evalCase.sourceCallIds ? JSON.stringify(evalCase.sourceCallIds) : null,
     });
@@ -265,7 +354,7 @@ export function getEvalCase(db: DatabaseType, id: string): EvalCase | null {
 
 /**
  * List eval cases, optionally filtered by status, oldest first so a report reads
- * in the order the suite grew. `listEvalCases(db, "approved")` is the regression
+ * in the order the suite grew. `listEvalCases(db, "added")` is the regression
  * runner's entire input.
  */
 export function listEvalCases(db: DatabaseType, status?: EvalCaseStatus): EvalCase[] {

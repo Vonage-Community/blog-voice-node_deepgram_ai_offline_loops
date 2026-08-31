@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // `npm run eval` — the regression evaluation runner.
 //
-// Seed the suite, load every approved case, replay each one against the agent's
+// Seed the suite, load every added case, replay each one against the agent's
 // logic, print the run, write the report, and exit non-zero if anything failed
 // so CI can fail a build on a regression.
 //
@@ -41,7 +41,7 @@ function main(): void {
     // Running it here means a fresh clone can go straight to `npm run eval`.
     loadSeedCases(db);
 
-    const cases = listEvalCases(db, "approved");
+    const cases = listEvalCases(db, "added");
     const report = buildReport(replayAll(cases), AGENT_VERSION, new Date().toISOString());
     const reportPath = writeReport(report, reportsDir);
 
@@ -57,9 +57,9 @@ function main(): void {
       // Not a failure — but a green run against an empty suite proves nothing,
       // and that is worth saying out loud rather than reporting "0 failed".
       console.log(
-        "\nNo approved eval cases found. Check for proposals awaiting review:\n" +
+        "\nNo eval cases in the suite. Check for proposals waiting on you:\n" +
           `  sqlite3 ${relative(REPO_ROOT, dbPath)} ` +
-          `"SELECT id, input, notes FROM eval_cases WHERE status = 'awaiting_review';"`,
+          `"SELECT id, input, notes FROM eval_cases WHERE status = 'pending';"`,
       );
     }
 

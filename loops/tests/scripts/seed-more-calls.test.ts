@@ -192,7 +192,7 @@ describe("the seed data drives the review loop end to end", () => {
     seedCalls(db, readSeedCalls());
 
     const summary = reviewTranscripts(db);
-    const proposals = listEvalCases(db, "awaiting_review");
+    const proposals = listEvalCases(db, "pending");
 
     // returns (3 calls), billing (2 calls), timeouts (3 calls), blocked (2 calls).
     expect(summary.callsReviewed).toBe(10);

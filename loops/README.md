@@ -55,7 +55,7 @@ npm run eval
 npm run review
 # → returns handoff (3 calls)          proposal written
 # → billing handoff (2 calls)          proposal written
-# → timeout pattern (3 calls)          Skipped — already covered by approved case seed-002
+# → timeout pattern (3 calls)          Skipped — already covered by case seed-002 in the suite
 # → fallback without timeout (2 calls) proposal written
 #
 # 3 proposals written
@@ -67,22 +67,22 @@ See what is waiting:
 
 ```bash
 sqlite3 ../data/calls.db \
-  "SELECT id, notes, status FROM eval_cases WHERE status = 'awaiting_review';"
+  "SELECT id, notes, status FROM eval_cases WHERE status = 'pending';"
 ```
 
-Approve one (paste a real id from that output):
+Add one to the suite (paste a real id from that output):
 
 ```bash
 sqlite3 ../data/calls.db \
-  "UPDATE eval_cases SET status = 'approved' WHERE id = 'proposal-<id>';"
+  "UPDATE eval_cases SET status = 'added' WHERE id = 'proposal-<id>';"
 ```
 
 ```bash
 npm run eval
-# 5 passed, 0 failed — the approved proposal is now part of the suite
+# 5 passed, 0 failed — the proposal you added is now part of the suite
 ```
 
-That is the whole cycle: the review loop found a pattern in real evidence, a human approved it, and the regression suite grew by one case. Nothing was approved automatically — the loop only ever writes `awaiting_review`.
+That is the whole cycle: the review loop found a pattern in real evidence, a human added it, and the regression suite grew by one case. Nothing entered the suite automatically — the loop only ever writes `pending`.
 
 ### Run 2 — After adding more synthetic data
 
@@ -106,24 +106,24 @@ npm run seed-calls
 # 0 inserted, 10 skipped   ← idempotent, safe to re-run
 
 npm run review
-# → returns handoff (3 calls)          Skipped — already covered by approved case proposal-…
+# → returns handoff (3 calls)          Skipped — already covered by case proposal-… in the suite
 # → billing handoff (2 calls)          Skipped — already proposed as proposal-…
-# → timeout pattern (3 calls)          Skipped — already covered by approved case seed-002
+# → timeout pattern (3 calls)          Skipped — already covered by case seed-002 in the suite
 # → fallback without timeout (2 calls) Skipped — already proposed as proposal-…
 #
 # No new proposals written.
 ```
 
-Both are correct. The loop still finds all four patterns and still prints them — it just refuses to write a proposal that duplicates one already in your queue or already in the suite. **Same evidence, nothing new to say.** A `rejected` proposal is the exception: reject one and the pattern comes back next run, because a human saying "not this" once should not silence a behaviour that keeps happening.
+Both are correct. The loop still finds all four patterns and still prints them — it just refuses to write a proposal that duplicates one already in your queue or already in the suite. **Same evidence, nothing new to say.** A `dismissed` proposal is the exception: dismiss one and the pattern comes back next run, because a human saying "not now" once should not silence a behaviour that keeps happening.
 
-Approve another one and the suite grows again:
+Add another one and the suite grows again:
 
 ```bash
 sqlite3 ../data/calls.db \
-  "SELECT id, notes, status FROM eval_cases WHERE status = 'awaiting_review';"
+  "SELECT id, notes, status FROM eval_cases WHERE status = 'pending';"
 
 sqlite3 ../data/calls.db \
-  "UPDATE eval_cases SET status = 'approved' WHERE id = 'proposal-<id>';"
+  "UPDATE eval_cases SET status = 'added' WHERE id = 'proposal-<id>';"
 
 npm run eval
 ```
@@ -193,9 +193,9 @@ Two directories named `data/` mean different things: **`../data/calls.db`** is g
 
 ## Troubleshooting
 
-**`npm run eval` shows 0 cases** — the `eval_cases` table has no `approved` rows. Either every case was rejected, or `DB_PATH` points at a different file than the one you have been writing to. Check with `sqlite3 ../data/calls.db "SELECT status, COUNT(*) FROM eval_cases GROUP BY status;"`.
+**`npm run eval` shows 0 cases** — the `eval_cases` table has no `added` rows. Either every case was dismissed, or `DB_PATH` points at a different file than the one you have been writing to. Check with `sqlite3 ../data/calls.db "SELECT status, COUNT(*) FROM eval_cases GROUP BY status;"`.
 
-**`npm run review` writes 0 proposals** — every pattern it found already has an `awaiting_review` or `approved` case asserting the same thing. That is the idempotency rule working; the run still prints each pattern and why it was skipped. Add more call records, or reject an existing proposal to let the pattern surface again.
+**`npm run review` writes 0 proposals** — every pattern it found already has a `pending` or `added` case asserting the same thing. That is the idempotency rule working; the run still prints each pattern and why it was skipped. Add more call records, or dismiss an existing proposal to let the pattern surface again.
 
 **`DB_PATH` not found** — copy `.env.example` to `.env`. The default is `../data/calls.db`, which is where Part 1 writes (`DB_PATH=./data/calls.db` from the repo root — same file, one directory up).
 

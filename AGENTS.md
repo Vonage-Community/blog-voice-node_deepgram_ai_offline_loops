@@ -170,7 +170,7 @@ Every call must write this to SQLite before the connection closes. Do not drop o
 Two loops that read the call evidence Part 1 stores:
 
 1. **Regression evaluation runner** (`npm run eval`) — replays evaluation cases against the agent's logic and produces a pass/fail report.
-2. **Transcript review loop** (`npm run review`) — scans stored call records, finds patterns, and writes proposed evaluation cases that a human must approve before they enter the eval suite.
+2. **Transcript review loop** (`npm run review`) — scans stored call records, finds patterns, and writes proposed evaluation cases that a human must add before they enter the eval suite.
 
 ### The boundary between `loops/` and `src/`
 
@@ -215,13 +215,13 @@ WAL mode is on, so the loops can read while a live call is writing.
 
 ### Architecture decisions — don't relitigate these
 
-**Eval cases live in SQLite, not in JSON files.** The review loop writes proposals directly in one step; a proposal can reference its source `call_id`; approval is a single `UPDATE` the blog post can show in one line; and "what is waiting for me?" is a `SELECT`. The trade-off is real and worth stating in the post: a SQLite file is not version-controlled, so proposals get no git history and no PR review. A production team would export them back to JSON. Do not implement that here.
+**Eval cases live in SQLite, not in JSON files.** The review loop writes proposals directly in one step; a proposal can reference its source `call_id`; adding one to the suite is a single `UPDATE` the blog post can show in one line; and "what is waiting for me?" is a `SELECT`. The trade-off is real and worth stating in the post: a SQLite file is not version-controlled, so proposals get no git history and no PR review. A production team would export them back to JSON. Do not implement that here.
 
 **The regression runner replays logic, not voice.** You cannot re-dial a phone call. Given a caller input string, the runner runs `classifyHandoffReason(input)`, and if there is no handoff, simulates a `FunctionCallRequest` through a minimal replay of `handleFunctionCall()` with a mock tool result injected. Then it compares the actual outcome to the expected one. No WebSocket, no audio, no real tool call — fast and deterministic.
 
 **Two behaviours the eval suite cannot cover, by construction.** `outcome: "error"` is set only by a Deepgram `Error` frame, and `transport_error` has no `mock_tool_result` value that can express it — so the live handler's one-retry-on-transport-failure branch is covered by Part 1's unit tests, not by `npm run eval`. Know this before trusting a green run; do not invent a fourth sentinel to paper over it.
 
-**The review loop proposes; humans decide.** Its only side effect is writing rows to `eval_cases` with `status = 'awaiting_review'`. It never changes prompts, tool policies, existing eval cases, or any live configuration, and it never approves its own proposals.
+**The review loop proposes; humans decide.** Its only side effect is writing rows to `eval_cases` with `status = 'pending'`. It never changes prompts, tool policies, existing eval cases, or any live configuration, and it never adds its own proposals to the suite.
 
 **Pattern detection is deterministic — no LLM.** Grouping uses only the structured columns (`outcome`, `handoff_reason`, `fallback_used`). Do not add a model call to classify patterns, and do not read transcript text to infer intent. A classifier inside the loop is one more thing that needs evaluating, which defeats the purpose.
 
@@ -245,8 +245,8 @@ CREATE TABLE IF NOT EXISTS eval_cases (
   expected_tool_called    INTEGER NOT NULL DEFAULT 1
     CHECK (expected_tool_called IN (0, 1)),
   mock_tool_result        TEXT,            -- JSON OrderResult, "__timeout__", or null
-  status                  TEXT NOT NULL DEFAULT 'approved'
-    CHECK (status IN ('approved', 'awaiting_review', 'rejected')),
+  status                  TEXT NOT NULL DEFAULT 'added'
+    CHECK (status IN ('added', 'pending', 'dismissed')),
   notes                   TEXT,            -- human-readable explanation
   source_call_ids         TEXT             -- JSON array of contributing call ids
 );
@@ -254,7 +254,9 @@ CREATE TABLE IF NOT EXISTS eval_cases (
 
 `source_call_id` is the one representative call; `source_call_ids` is the whole evidence group a proposal was built from. Both exist because a proposal is evidence-backed by definition ("five calls did this") and the singular column predates the review loop. New columns are added the way Part 1 does it in `src/storage/db.ts` — an `ALTER TABLE` guarded by `PRAGMA table_info`, since `CREATE TABLE IF NOT EXISTS` is a no-op on an existing database.
 
-`status = 'approved'` means the regression runner includes it. `status = 'awaiting_review'` means the review loop proposed it and a human must approve it first. `status = 'rejected'` means a human looked and declined.
+`status = 'added'` means the regression runner includes it. `status = 'pending'` means the review loop proposed it and a human has not decided yet. `status = 'dismissed'` means a human looked and said not now.
+
+The names describe what a person means, not what the code does with the row — `added` answers "is it in the suite?" without a glossary. They were renamed from `approved`/`awaiting_review`/`rejected`, and `ensureEvalSchema` migrates an older database on open. Because SQLite cannot drop a CHECK constraint, that migration rebuilds the table rather than running an `UPDATE`; see `migrateStatusNames` in `loops/src/db/eval-schema.ts`.
 
 Two storage rules that are easy to get wrong:
 
@@ -285,25 +287,25 @@ Detector 3 groups utterances by exact string equality. No stemming, no edit dist
 
 ### Proposal identity and idempotency
 
-* A proposal is a duplicate when an existing case shares its **`input` and `expected_outcome`** and is `awaiting_review` or `approved`. Skip it: do not stack duplicates in a queue nobody has worked through, and do not re-propose what is already in the suite.
-* `rejected` does **not** block a new proposal. A human said "not this"; if the behaviour keeps happening they should get to say it again with fresh evidence rather than have the loop quietly agree with them forever.
-* Proposal ids are `proposal-<epoch-ms>-<pattern-type>` and are **not unique on their own**. Two patterns of the same type share a millisecond, and a re-proposal after a rejection regenerates the id of the rejected row still in the table. Both are reachable; both would be swallowed by `ON CONFLICT DO NOTHING`. Check this run's issued ids *and* the stored ones before writing.
+* A proposal is a duplicate when an existing case shares its **`input` and `expected_outcome`** and is `pending` or `added`. Skip it: do not stack duplicates in a queue nobody has worked through, and do not re-propose what is already in the suite.
+* `dismissed` does **not** block a new proposal. A human said "not now"; if the behaviour keeps happening they should get to say it again with fresh evidence rather than have the loop quietly agree with them forever.
+* Proposal ids are `proposal-<epoch-ms>-<pattern-type>` and are **not unique on their own**. Two patterns of the same type share a millisecond, and a re-proposal after a dismissal regenerates the id of the dismissed row still in the table. Both are reachable; both would be swallowed by `ON CONFLICT DO NOTHING`. Check this run's issued ids *and* the stored ones before writing.
 
-### Approval commands (show these in the blog post)
+### Review commands (show these in the blog post)
 
 ```bash
 # See what's waiting
 sqlite3 ../data/calls.db \
   "SELECT id, input, expected_outcome, notes \
-   FROM eval_cases WHERE status = 'awaiting_review';"
+   FROM eval_cases WHERE status = 'pending';"
 
-# Approve one
+# Add one to the suite
 sqlite3 ../data/calls.db \
-  "UPDATE eval_cases SET status = 'approved' WHERE id = 'proposal-001';"
+  "UPDATE eval_cases SET status = 'added' WHERE id = 'proposal-001';"
 
-# Reject one
+# Dismiss one
 sqlite3 ../data/calls.db \
-  "UPDATE eval_cases SET status = 'rejected' WHERE id = 'proposal-002';"
+  "UPDATE eval_cases SET status = 'dismissed' WHERE id = 'proposal-002';"
 ```
 
 ### Seed eval cases
@@ -367,11 +369,11 @@ Part 2 defaults (`loops/`, `loops/tests/`):
 
 * **Never read the real `data/calls.db` from a test.** Open `:memory:` and insert fixture rows. A test that depends on whatever calls happened to be made last week is not a test.
 * **Never call the real `lookupOrderStatus`** — it has real delays, including a deliberate 2000ms one. Inject a mock tool function instead.
-* `loops/src/db/eval-schema.ts`: table exists, every column round-trips, the CHECK constraints actually reject bad values, and a duplicate id leaves the existing row untouched.
+* `loops/src/db/eval-schema.ts`: table exists, every column round-trips, the CHECK constraints actually reject bad values, a duplicate id leaves the existing row untouched, and a pre-rename database is migrated to the `added`/`pending`/`dismissed` names on open.
 * `loops/src/db/seed-loader.ts`: the committed seed file parses, a malformed case is rejected by name, a second load inserts nothing, and a status a human edited between runs survives.
 * `loops/src/runner/replay.ts`: pass (correct outcome), fail (wrong outcome), handoff detected, fallback triggered on the timeout sentinel, and `not_found` treated as completed.
 * `loops/src/review/pattern-finder.ts`: groups repeated handoff reasons, groups repeated timeouts, and ignores patterns below the minimum evidence threshold (default: 3 calls).
-* `loops/src/review/transcript-review.ts`: writes proposals with `status = 'awaiting_review'`, does not duplicate one already awaiting review or approved, re-proposes after a rejection, records the evidence in `source_call_ids`, and respects the window limit.
+* `loops/src/review/transcript-review.ts`: writes proposals with `status = 'pending'`, does not duplicate one already pending or added, re-proposes after a dismissal, records the evidence in `source_call_ids`, and respects the window limit.
 * Build call-record fixtures with Part 1's own `writeCallRecord` into Part 1's own `openDatabase(":memory:")` schema. A hand-written row can express a call the live path could never produce — a `handoff_reason` with no utterance that would cause it — and then you are testing against a call that cannot happen.
 * `loops/src/runner/report.ts`: formats pass/fail counts correctly and lists each failure with input, expected, and actual.
 
@@ -435,9 +437,9 @@ npm run review
 npm test
 npm run typecheck
 
-# Approve a proposal
+# Add a proposal to the suite
 sqlite3 ../data/calls.db \
-  "UPDATE eval_cases SET status = 'approved' WHERE id = 'proposal-001';"
+  "UPDATE eval_cases SET status = 'added' WHERE id = 'proposal-001';"
 ```
 
 ---
