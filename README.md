@@ -71,7 +71,7 @@ See [`loops/README.md`](loops/README.md) for the full three-run demo, all comman
 
 ```bash
 # Part 1 — live agent
-cp .env.example .env        # fill in DEEPGRAM_API_KEY and BASE_URL
+cp .env.example .env        # fill in VONAGE_APP_ID, VONAGE_NUMBER, SUPPORT_PHONE_NUMBER, DEEPGRAM_API_KEY and BASE_URL
 npm install
 ngrok http 3000             # copy the URL into BASE_URL and Vonage dashboard
 npm run dev
