@@ -19,23 +19,25 @@ The two parts share one SQLite database. Part 1 writes to it during calls. Part 
 - **Part 1 repo:** [Vonage-Community/blog-voice-node_deepgram_ai_tools](https://github.com/Vonage-Community/blog-voice-node_deepgram_ai_tools) — the live agent on its own, with its full setup guide
 - **Prerequisite guide:** [How to Build an AI Voice Agent with Vonage Voice API and Deepgram](https://developer.vonage.com/en/voice/voice-api/guides/voice-ai-agent-deepgram) — Part 1 builds directly on top of it
 
-### The Live-Path Contract
+## What This Agent Does
 
-This table is the architectural core of the tutorial. Every implementation decision flows from it, and it is enforced in code (in `src/agent/tool-policy.ts` and `src/voice/websocket-handler.ts`), not just requested in the prompt.
+This agent has one job: look up an order status. Everything else is out of scope.
 
-| Constraint          | Value                                     |
-| ------------------- | ----------------------------------------- |
-| Use case            | Order status only                         |
-| Allowed tool calls  | 1 (`getOrderStatus`) **per call**         |
-| Retry limit         | 1, temporary transport failures only      |
-| No retries for      | `not_found`, invalid order ID, timeout    |
-| Total tool timeout  | 1500 ms                                    |
-| Fallback            | Predefined string, always available       |
-| Out-of-scope        | Handoff response immediately, no attempt  |
-| Write operations    | None                                      |
-| Stored evidence     | Transcript, tool result, timing, outcome  |
+| If the caller asks... | The agent... |
+|---|---|
+| "Where is order A1001?" | Looks it up and reads back the result |
+| About an order that doesn't exist | Tells them it couldn't find it — no fallback, just an honest answer |
+| And the lookup takes too long | Says it's having trouble and offers to connect them to support |
+| About billing, returns, or anything else | Transfers them to a human immediately |
 
-The narrow system prompt, the exact fallback/handoff strings, and the call-record schema are pinned in [`AGENTS.md`](AGENTS.md) — the spec for this repo.
+A few hard limits the code enforces:
+
+- **One lookup per call** — not a prompt suggestion, a code rule in `src/agent/tool-policy.ts`
+- **1500ms timeout** — if the backend doesn't answer in time, the caller gets the fallback
+- **One retry on network failures** — timeouts are never retried
+- **No write operations** — this agent reads, it never changes anything
+
+Every call is saved to SQLite: transcript, tool result, timing, and outcome. Part 2 reads those records to find patterns and run regression tests.
 
 For full setup instructions — Vonage application, ngrok, environment variables, and the three test calls — see the [Part 1 tutorial](https://developer.vonage.com/en/blog/), the [Part 1 repo](https://github.com/Vonage-Community/blog-voice-node_deepgram_ai_tools), or [`docs/live-call-checklist.md`](docs/live-call-checklist.md).
 
