@@ -10,12 +10,10 @@ Run through these in order before you dial in.
 ### 1. Credentials in `.env`
 
 ```bash
-VONAGE_API_KEY=
-VONAGE_API_SECRET=
 VONAGE_APP_ID=
 VONAGE_PRIVATE_KEY_PATH=./vonage_private.key   # must match your actual key file
 DEEPGRAM_API_KEY=
-BASE_URL=https://your-ngrok-url.ngrok.io       # ← the one that bites everyone
+BASE_URL=https://your-ngrok-url.ngrok.io       # ← add your ngrok url after starting the ngrok server
 PORT=3000
 DB_PATH=./data/calls.db
 ```
