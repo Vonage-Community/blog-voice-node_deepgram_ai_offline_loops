@@ -19,7 +19,7 @@ The two parts share one SQLite database. Part 1 writes to it during calls. Part 
 - **Part 1 repo:** [Vonage-Community/blog-voice-node_deepgram_ai_tools](https://github.com/Vonage-Community/blog-voice-node_deepgram_ai_tools) — the live agent on its own, with its full setup guide
 - **Prerequisite guide:** [How to Build an AI Voice Agent with Vonage Voice API and Deepgram](https://developer.vonage.com/en/voice/voice-api/guides/voice-ai-agent-deepgram) — Part 1 builds directly on top of it
 
-## What This Agent Does
+### What This Agent Does
 
 This agent has one job: look up an order status. Everything else is out of scope.
 
