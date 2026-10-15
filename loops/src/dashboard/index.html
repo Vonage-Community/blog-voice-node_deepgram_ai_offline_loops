@@ -1,0 +1,282 @@
+<!doctype html>
+<!--
+  The offline loops dashboard — an optional local view, not part of the tutorial.
+
+  One file, no build step, no framework, no npm install for the front end. That
+  constraint is doing real work: this page has to survive being ignored for six
+  months and still open. Anything with a bundler would need its own upgrade path,
+  and a demo tool that needs maintenance is worse than no demo tool.
+
+  What it deliberately cannot do: edit an eval case, read a transcript, or start
+  either loop. Those absences are decisions — see the archived plan.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Loops Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --vonage-purple: #871fff;
+        --vonage-plum: #3d0049;
+      }
+      body { background: #faf9fb; }
+      .card-exit { opacity: 0; transform: translateX(12px); transition: opacity .35s ease, transform .35s ease; }
+      .card-enter { transition: opacity .35s ease, transform .35s ease; }
+    </style>
+  </head>
+
+  <body class="text-slate-800">
+    <header style="background: var(--vonage-plum)" class="text-white">
+      <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-4">
+        <div>
+          <h1 class="text-xl font-semibold tracking-tight">Agent Loops Dashboard</h1>
+          <p class="text-sm text-purple-200 mt-0.5">
+            Offline review queue, eval history, and recent calls — read from
+            <code class="text-purple-100">data/calls.db</code>
+          </p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="updated" class="text-xs text-purple-200"></span>
+          <button
+            id="refresh"
+            style="background: var(--vonage-purple)"
+            class="text-white text-sm font-medium px-4 py-2 rounded-md hover:opacity-90 transition"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <!-- Proposals take the wider column: this is the panel with decisions in it. -->
+      <section class="lg:col-span-3">
+        <div class="flex items-baseline gap-3 mb-3">
+          <h2 class="text-lg font-semibold" style="color: var(--vonage-plum)">Proposals</h2>
+          <span id="proposal-count" class="text-sm text-slate-500"></span>
+        </div>
+        <div id="proposals" class="space-y-3"></div>
+      </section>
+
+      <aside class="lg:col-span-2 space-y-6">
+        <section>
+          <h2 class="text-lg font-semibold mb-3" style="color: var(--vonage-plum)">
+            Last Eval Runs
+          </h2>
+          <div id="eval-runs" class="space-y-2"></div>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold mb-3" style="color: var(--vonage-plum)">
+            Recent Calls
+          </h2>
+          <div id="calls" class="bg-white rounded-lg border border-slate-200 overflow-hidden"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script>
+      const REFRESH_MS = 30_000;
+
+      // Everything the page renders is server data, so every interpolation goes
+      // through here. `notes` and `input` are caller utterances that reached us
+      // through a transcript — untrusted text by definition.
+      const esc = (v) =>
+        String(v ?? "").replace(/[&<>"']/g, (c) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]),
+        );
+
+      const el = (id) => document.getElementById(id);
+
+      const empty = (msg, cmd) => `
+        <div class="bg-white border border-dashed border-slate-300 rounded-lg p-6 text-center">
+          <p class="text-sm text-slate-500">${esc(msg)}
+          ${cmd ? `<code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">${esc(cmd)}</code>` : ""}
+          ${cmd ? esc(".") : ""}</p>
+        </div>`;
+
+      const time = (iso) => {
+        const d = new Date(iso);
+        return Number.isNaN(d.getTime()) ? String(iso ?? "") : d.toLocaleString();
+      };
+
+      // --- Proposals --------------------------------------------------------
+
+      const OUTCOME_STYLE = {
+        completed: "bg-green-100 text-green-800",
+        fallback: "bg-yellow-100 text-yellow-800",
+        handoff: "bg-red-100 text-red-800",
+        error: "bg-slate-200 text-slate-700",
+      };
+
+      function proposalCard(p) {
+        const expected =
+          esc(p.expected_outcome) +
+          (p.expected_handoff_reason ? ` (${esc(p.expected_handoff_reason)})` : "");
+        const evidence = p.source_call_ids?.length
+          ? `${p.source_call_ids.length} call${p.source_call_ids.length === 1 ? "" : "s"}`
+          : "";
+
+        return `
+          <article class="card-enter bg-white rounded-lg border border-slate-200 p-4 shadow-sm" data-id="${esc(p.id)}">
+            <!-- The notes field leads. It is the question a human has to answer;
+                 everything else on the card is supporting evidence for it. -->
+            <p class="text-[15px] leading-relaxed text-slate-900">${esc(p.notes) || "<span class='text-slate-400'>(no notes)</span>"}</p>
+
+            <dl class="mt-3 space-y-1 text-sm">
+              <div class="flex gap-2">
+                <dt class="text-slate-500 w-20 shrink-0">Input</dt>
+                <dd class="font-mono text-slate-700">"${esc(p.input)}"</dd>
+              </div>
+              <div class="flex gap-2">
+                <dt class="text-slate-500 w-20 shrink-0">Expects</dt>
+                <dd>
+                  <span class="px-2 py-0.5 rounded text-xs font-medium ${OUTCOME_STYLE[p.expected_outcome] ?? "bg-slate-100 text-slate-700"}">${expected}</span>
+                </dd>
+              </div>
+            </dl>
+
+            <div class="mt-4 flex items-center gap-2">
+              <button data-action="add" data-id="${esc(p.id)}"
+                style="background: var(--vonage-purple)"
+                class="text-white text-sm font-medium px-3 py-1.5 rounded-md hover:opacity-90 transition">
+                Add to Suite
+              </button>
+              <button data-action="dismiss" data-id="${esc(p.id)}"
+                class="text-slate-600 text-sm font-medium px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-50 transition">
+                Dismiss
+              </button>
+              <span class="ml-auto text-xs text-slate-400">${esc(evidence)}</span>
+            </div>
+          </article>`;
+      }
+
+      async function loadProposals() {
+        const proposals = await fetch("/api/proposals").then((r) => r.json());
+        el("proposal-count").textContent = proposals.length
+          ? `${proposals.length} waiting`
+          : "";
+        el("proposals").innerHTML = proposals.length
+          ? proposals.map(proposalCard).join("")
+          : empty("No proposals waiting. Run", "npm run review") +
+            `<p class="text-center text-xs text-slate-400 mt-2">to scan for patterns.</p>`;
+      }
+
+      // One listener on the container rather than per-card handlers, so a
+      // re-render never leaves stale listeners behind.
+      el("proposals").addEventListener("click", async (event) => {
+        const button = event.target.closest("button[data-action]");
+        if (!button) return;
+
+        const { action, id } = button.dataset;
+        const card = button.closest("article");
+        button.disabled = true;
+
+        const response = await fetch(`/api/proposals/${encodeURIComponent(id)}/${action}`, {
+          method: "POST",
+        });
+
+        if (!response.ok) {
+          button.disabled = false;
+          button.textContent = "Failed — retry";
+          return;
+        }
+
+        // Fade the card, then reconcile against the server rather than trusting
+        // the local guess: another tab, or a `sqlite3` UPDATE in a terminal, may
+        // have changed the queue since this render.
+        card.classList.add("card-exit");
+        setTimeout(loadProposals, 350);
+      });
+
+      // --- Eval runs --------------------------------------------------------
+
+      function evalRunRow(run, index) {
+        const green = run.failed === 0;
+        const badge = green
+          ? `<span class="text-green-700 font-semibold">✓ ${run.passed}/${run.totalCases}</span>`
+          : `<span class="text-red-700 font-semibold">✗ ${run.passed}/${run.totalCases}</span>`;
+
+        const cases = (run.results ?? [])
+          .map(
+            (r) => `
+              <li class="flex items-start gap-2 py-1 border-t border-slate-100">
+                <span class="${r.passed ? "text-green-600" : "text-red-600"} font-semibold">${r.passed ? "✓" : "✗"}</span>
+                <span class="font-mono text-xs text-slate-600 break-all">${esc(r.caseId)}</span>
+              </li>`,
+          )
+          .join("");
+
+        return `
+          <details class="bg-white rounded-lg border border-slate-200 overflow-hidden" ${index === 0 ? "open" : ""}>
+            <summary class="px-4 py-2.5 cursor-pointer hover:bg-slate-50 flex items-center justify-between gap-3">
+              <span class="text-sm">
+                <span class="font-medium text-slate-700">${esc(run.agentVersion)}</span>
+                <span class="text-slate-400 text-xs block">${esc(time(run.runAt))}</span>
+              </span>
+              ${badge}
+            </summary>
+            <ul class="px-4 pb-3 text-sm">${cases}</ul>
+          </details>`;
+      }
+
+      async function loadEvalRuns() {
+        const runs = await fetch("/api/eval-runs").then((r) => r.json());
+        el("eval-runs").innerHTML = runs.length
+          ? runs.slice(0, 5).map(evalRunRow).join("")
+          : empty("No eval runs yet. Run", "npm run eval");
+      }
+
+      // --- Recent calls -----------------------------------------------------
+
+      async function loadCalls() {
+        const calls = await fetch("/api/calls").then((r) => r.json());
+
+        if (!calls.length) {
+          el("calls").innerHTML = empty("No calls yet. Make a phone call or run", "npm run seed-calls");
+          return;
+        }
+
+        el("calls").innerHTML = `
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+              <tr>
+                <th class="text-left font-medium px-3 py-2">When</th>
+                <th class="text-left font-medium px-3 py-2">Outcome</th>
+                <th class="text-left font-medium px-3 py-2">Version</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${calls
+                .map(
+                  (c) => `
+                <tr class="border-t border-slate-100">
+                  <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${esc(time(c.started_at))}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium ${OUTCOME_STYLE[c.outcome] ?? "bg-slate-200 text-slate-700"}">${esc(c.outcome)}</span>
+                    ${c.handoff_reason ? `<span class="ml-1.5 text-xs text-slate-500">${esc(c.handoff_reason)}</span>` : ""}
+                  </td>
+                  <td class="px-3 py-2 text-slate-500 text-xs">${esc(c.agent_version)}</td>
+                </tr>`,
+                )
+                .join("")}
+            </tbody>
+          </table>`;
+      }
+
+      // --- Refresh ----------------------------------------------------------
+
+      async function refresh() {
+        // Independent panels: one failing endpoint should not blank the others.
+        await Promise.allSettled([loadProposals(), loadEvalRuns(), loadCalls()]);
+        el("updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      }
+
+      el("refresh").addEventListener("click", refresh);
+      refresh();
+      setInterval(refresh, REFRESH_MS);
+    </script>
+  </body>
+</html>

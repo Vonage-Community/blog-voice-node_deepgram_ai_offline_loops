@@ -204,7 +204,9 @@ It has its own `package.json`, `tsconfig.json`, `node_modules`, and `.env`. Run 
 
 In a CLI entry point, `import "dotenv/config"` must come **before** any import that reads `process.env` at module scope — `src/agent/agent-version.js` is one. ESM evaluates imports top-to-bottom before the module body runs, so the wrong order silently stamps every report with the default `AGENT_VERSION`.
 
-Its dependencies are `better-sqlite3` and `dotenv`. Nothing else. No Vonage SDK, no Deepgram, no `ws`, no Express. If a loops task seems to need one of those, the design is wrong — stop and raise it.
+Its dependencies are `better-sqlite3` and `dotenv`. Nothing else. No Vonage SDK, no Deepgram, no `ws`. If a loops task seems to need one of those, the design is wrong — stop and raise it.
+
+**One documented exception:** `express` (plus `supertest` as a dev dependency) for the optional dashboard in `loops/src/dashboard/`. See "The optional dashboard" below. Nothing the tutorial runs imports it.
 
 ### The shared database
 
@@ -315,11 +317,31 @@ sqlite3 ../data/calls.db \
 
 They live in JSON rather than in code for one reason worth explaining in the post: that file *is* version-controlled, while the database is not. A reader adding a fifth case edits JSON and gets a diff for it.
 
+### The optional dashboard — not part of the tutorial
+
+`loops/src/dashboard/` is a local Express server (`npm run dashboard`, default port 4000)
+serving one self-contained HTML page: the pending proposal queue with add/dismiss buttons,
+the last five eval runs, and the last twenty calls. It exists for demos, screenshots, and
+watching the loop work — **not** for the article, which still teaches two CLI commands and a
+`sqlite3` one-liner.
+
+Rules that keep it from becoming a second surface to maintain:
+
+* **Nothing imports it.** `run-eval.ts`, `run-review.ts`, and `scripts/seed-more-calls.ts` do
+  not reference it. Delete the directory and Part 2 is unchanged.
+* **It cannot do anything the CLI cannot.** Its only writes are the same two `UPDATE`
+  statements the blog post shows. It cannot edit an eval case, read a transcript, or trigger
+  either loop — those absences are deliberate, not a backlog.
+* **No build step, no framework.** One HTML file, vanilla JS, Tailwind from a CDN for styling
+  only. A demo tool that needs its own upgrade path is worse than no demo tool.
+* Its import of Part 1's storage is three levels deep — `../../../src/storage/db.js` — the
+  same as `loops/src/<area>/`, since `dashboard/` sits beside `runner/` and `review/`.
+
 ### Out of scope for `loops/` — do not build
 
 * No automatic changes to prompts, tools, or live configuration. The loops propose; humans decide.
 * No scheduled job implementation — mention it in the blog post conclusion only.
-* No web UI for reviewing proposals — the `sqlite3` commands above are enough for a tutorial.
+* No web UI **in the tutorial** — the `sqlite3` commands above are enough, and the article shows those. The optional dashboard in `loops/src/dashboard/` is a separate, non-tutorial tool; see below.
 * No LLM call anywhere inside either loop.
 * No connection to the live WebSocket or voice path, and no call to the real `lookupOrderStatus`.
 * No Part 3 content — connecting to a real order database and expanding the tool set is the next article.
@@ -399,7 +421,7 @@ For a change to the live path (`src/`):
 For a change to the loops (`loops/`):
 
 * Both CLI scripts run end-to-end against a seeded database without errors.
-* Nothing in `loops/` imports Vonage, Deepgram, `ws`, or Express, and nothing in `src/` imports from `loops/`.
+* Nothing in `loops/` imports Vonage, Deepgram, or `ws`, and nothing in `src/` imports from `loops/`. Express appears only under `loops/src/dashboard/`, which no CLI entry point imports.
 
 ---
 
