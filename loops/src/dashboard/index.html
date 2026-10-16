@@ -208,41 +208,80 @@
 
       // --- Decisions --------------------------------------------------------
       //
-      // Read-only. Each row leads with the rule it now enforces — what the
-      // caller said, and what the agent does about it — with the question that
-      // prompted it underneath. Read as a list, the added ones are policy and the
-      // dismissed ones are a backlog.
+      // Read-only, and written for whoever decides what the agent should do
+      // next, not for whoever maintains the tests. Each row says in plain
+      // English what the agent does today; the caller's own words sit underneath
+      // as the example. The two groups are the two answers a human has given:
+      // "that's right, keep it" (added) and "callers want more than this"
+      // (dismissed).
 
       const DECISION_GROUPS = [
-        { status: "added", title: "Locked in", note: "tested on every eval run", tone: "text-green-700" },
-        { status: "dismissed", title: "Not now", note: "the loop will ask again", tone: "text-slate-500" },
+        {
+          status: "added",
+          title: "Working as intended",
+          note: "the agent handles this correctly; a test keeps it that way",
+          tone: "text-green-700",
+        },
+        {
+          status: "dismissed",
+          title: "Needs a decision",
+          note: "callers keep asking for this; the agent can't do it yet",
+          tone: "text-amber-700",
+        },
       ];
 
+      // What callers were asking about, by handoff reason.
+      const TOPICS = {
+        billing: "Billing questions",
+        returns: "Returns",
+        cancellation: "Cancellations",
+        account: "Account questions",
+        unsupported: "Asking for a person",
+      };
+
+      // The rule, in plain English, built only from structured columns — no
+      // parsing of the notes text. Each outcome comes from exactly one kind of
+      // proposal the review loop writes, which is what makes this mapping safe:
+      // handoff from repeated handoffs, fallback from timeouts, and completed
+      // only from fallbacks that weren't timeouts — callers who asked about a
+      // second order and hit the one-lookup limit.
+      function plainRule(d) {
+        if (d.expected_outcome === "handoff") {
+          const topic = TOPICS[d.expected_handoff_reason] ?? "Out-of-scope requests";
+          return [topic, "transferred to support"];
+        }
+        if (d.expected_outcome === "fallback") {
+          return ["Slow order lookups", "apologizes instead of guessing"];
+        }
+        if (d.expected_outcome === "completed") {
+          return ["Asking about a second order", "one order per call"];
+        }
+        return [d.input, d.expected_outcome];
+      }
+
       function decisionRow(d) {
-        const expected =
-          esc(d.expected_outcome) +
-          (d.expected_handoff_reason ? ` (${esc(d.expected_handoff_reason)})` : "");
+        const [topic, behavior] = plainRule(d);
         const n = d.source_call_ids?.length ?? 0;
 
         return `
           <li class="px-4 py-3 border-t border-slate-100 first:border-t-0">
             <div class="flex items-start justify-between gap-3">
-              <p class="text-sm text-slate-800">
-                <span class="font-mono">"${esc(d.input)}"</span>
+              <p class="text-sm text-slate-900">
+                <span class="font-medium">${esc(topic)}</span>
                 <span class="text-slate-400 mx-1">→</span>
-                <span class="px-2 py-0.5 rounded text-xs font-medium ${OUTCOME_STYLE[d.expected_outcome] ?? "bg-slate-100 text-slate-700"}">${expected}</span>
+                ${esc(behavior)}
               </p>
               <span class="text-xs text-slate-400 shrink-0">${n ? `${n} call${n === 1 ? "" : "s"}` : ""}</span>
             </div>
-            <p class="mt-1 text-xs text-slate-500 truncate" title="${esc(d.notes)}">${esc(d.notes)}</p>
+            <p class="mt-1 text-xs text-slate-500 truncate" title="${esc(d.notes)}">e.g. "${esc(d.input)}"</p>
           </li>`;
       }
 
       async function loadDecisions() {
         const decisions = await fetch("/api/decisions").then((r) => r.json());
 
-        // Only groups that have something in them. An empty "Not now" heading
-        // on a projector is a question nobody asked.
+        // Only groups that have something in them. An empty heading on a
+        // projector is a question nobody asked.
         const groups = DECISION_GROUPS.map((g) => ({
           ...g,
           items: decisions.filter((d) => d.status === g.status),
