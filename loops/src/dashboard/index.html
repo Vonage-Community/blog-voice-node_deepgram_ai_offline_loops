@@ -51,14 +51,25 @@
     </header>
 
     <main class="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
-      <!-- Proposals take the wider column: this is the panel with decisions in it. -->
-      <section class="lg:col-span-3">
-        <div class="flex items-baseline gap-3 mb-3">
-          <h2 class="text-lg font-semibold" style="color: var(--vonage-plum)">Proposals</h2>
-          <span id="proposal-count" class="text-sm text-slate-500"></span>
-        </div>
-        <div id="proposals" class="space-y-3"></div>
-      </section>
+      <!-- The wider column is the human's: what's waiting for a decision, and
+           what has been decided. Adding a proposal moves it from one to the other. -->
+      <div class="lg:col-span-3 space-y-8">
+        <section>
+          <div class="flex items-baseline gap-3 mb-3">
+            <h2 class="text-lg font-semibold" style="color: var(--vonage-plum)">Proposals</h2>
+            <span id="proposal-count" class="text-sm text-slate-500"></span>
+          </div>
+          <div id="proposals" class="space-y-3"></div>
+        </section>
+
+        <section>
+          <div class="flex items-baseline gap-3 mb-3">
+            <h2 class="text-lg font-semibold" style="color: var(--vonage-plum)">Decisions</h2>
+            <span id="decision-count" class="text-sm text-slate-500"></span>
+          </div>
+          <div id="decisions" class="space-y-5"></div>
+        </section>
+      </div>
 
       <aside class="lg:col-span-2 space-y-6">
         <section>
@@ -90,12 +101,14 @@
 
       const el = (id) => document.getElementById(id);
 
-      const empty = (msg, cmd) => `
-        <div class="bg-white border border-dashed border-slate-300 rounded-lg p-6 text-center">
-          <p class="text-sm text-slate-500">${esc(msg)}
-          ${cmd ? `<code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">${esc(cmd)}</code>` : ""}
-          ${cmd ? esc(".") : ""}</p>
-        </div>`;
+      // An empty state that names the command which fills it. Built by
+      // concatenation rather than a multi-line template, so no stray whitespace
+      // lands between the command and the full stop.
+      const empty = (before, cmd, after = ".") =>
+        `<div class="bg-white border border-dashed border-slate-300 rounded-lg p-6 text-center">` +
+        `<p class="text-sm text-slate-500">${esc(before)}` +
+        (cmd ? ` <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">${esc(cmd)}</code>${esc(after)}` : "") +
+        `</p></div>`;
 
       const time = (iso) => {
         const d = new Date(iso);
@@ -160,8 +173,7 @@
           : "";
         el("proposals").innerHTML = proposals.length
           ? proposals.map(proposalCard).join("")
-          : empty("No proposals waiting. Run", "npm run review") +
-            `<p class="text-center text-xs text-slate-400 mt-2">to scan for patterns.</p>`;
+          : empty("No proposals waiting. Run", "npm run review", " to scan for patterns.");
       }
 
       // One listener on the container rather than per-card handlers, so a
@@ -188,8 +200,72 @@
         // the local guess: another tab, or a `sqlite3` UPDATE in a terminal, may
         // have changed the queue since this render.
         card.classList.add("card-exit");
-        setTimeout(loadProposals, 350);
+        setTimeout(() => {
+          loadProposals();
+          loadDecisions();
+        }, 350);
       });
+
+      // --- Decisions --------------------------------------------------------
+      //
+      // Read-only. Each row leads with the rule it now enforces — what the
+      // caller said, and what the agent does about it — with the question that
+      // prompted it underneath. Read as a list, the added ones are policy and the
+      // dismissed ones are a backlog.
+
+      const DECISION_GROUPS = [
+        { status: "added", title: "Locked in", note: "tested on every eval run", tone: "text-green-700" },
+        { status: "dismissed", title: "Not now", note: "the loop will ask again", tone: "text-slate-500" },
+      ];
+
+      function decisionRow(d) {
+        const expected =
+          esc(d.expected_outcome) +
+          (d.expected_handoff_reason ? ` (${esc(d.expected_handoff_reason)})` : "");
+        const n = d.source_call_ids?.length ?? 0;
+
+        return `
+          <li class="px-4 py-3 border-t border-slate-100 first:border-t-0">
+            <div class="flex items-start justify-between gap-3">
+              <p class="text-sm text-slate-800">
+                <span class="font-mono">"${esc(d.input)}"</span>
+                <span class="text-slate-400 mx-1">→</span>
+                <span class="px-2 py-0.5 rounded text-xs font-medium ${OUTCOME_STYLE[d.expected_outcome] ?? "bg-slate-100 text-slate-700"}">${expected}</span>
+              </p>
+              <span class="text-xs text-slate-400 shrink-0">${n ? `${n} call${n === 1 ? "" : "s"}` : ""}</span>
+            </div>
+            <p class="mt-1 text-xs text-slate-500 truncate" title="${esc(d.notes)}">${esc(d.notes)}</p>
+          </li>`;
+      }
+
+      async function loadDecisions() {
+        const decisions = await fetch("/api/decisions").then((r) => r.json());
+
+        // Only groups that have something in them. An empty "Not now" heading
+        // on a projector is a question nobody asked.
+        const groups = DECISION_GROUPS.map((g) => ({
+          ...g,
+          items: decisions.filter((d) => d.status === g.status),
+        })).filter((g) => g.items.length);
+
+        el("decision-count").textContent = groups
+          .map((g) => `${g.items.length} ${g.title.toLowerCase()}`)
+          .join(" · ");
+
+        el("decisions").innerHTML = groups.length
+          ? groups
+              .map(
+                (g) => `
+            <div>
+              <h3 class="text-xs font-semibold uppercase tracking-wide mb-2 ${g.tone}">
+                ${esc(g.title)} <span class="font-normal normal-case tracking-normal text-slate-400">— ${esc(g.note)}</span>
+              </h3>
+              <ul class="bg-white rounded-lg border border-slate-200">${g.items.map(decisionRow).join("")}</ul>
+            </div>`,
+              )
+              .join("")
+          : empty("No decisions yet. Add a proposal to the suite and it lands here.");
+      }
 
       // --- Eval runs --------------------------------------------------------
 
@@ -270,7 +346,7 @@
 
       async function refresh() {
         // Independent panels: one failing endpoint should not blank the others.
-        await Promise.allSettled([loadProposals(), loadEvalRuns(), loadCalls()]);
+        await Promise.allSettled([loadProposals(), loadDecisions(), loadEvalRuns(), loadCalls()]);
         el("updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
       }
 

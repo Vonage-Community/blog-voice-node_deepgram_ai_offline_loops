@@ -321,7 +321,10 @@ They live in JSON rather than in code for one reason worth explaining in the pos
 
 `loops/src/dashboard/` is a local Express server (`npm run dashboard`, default port 4000)
 serving one self-contained HTML page: the pending proposal queue with add/dismiss buttons,
-the last five eval runs, and the last twenty calls. It exists for demos, screenshots, and
+a read-only **Decisions** panel of proposals already added ("Locked in") or dismissed ("Not
+now"), the last five eval runs, and the last twenty calls. A decision is a proposal the loop
+wrote (`source_call_id IS NOT NULL`); the hand-written seeds are `added` too but are not
+decisions, so they are left out. It exists for demos, screenshots, and
 watching the loop work — **not** for the article, which still teaches two CLI commands and a
 `sqlite3` one-liner.
 

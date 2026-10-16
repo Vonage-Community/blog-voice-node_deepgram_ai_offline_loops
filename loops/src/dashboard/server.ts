@@ -67,6 +67,16 @@ export interface ProposalSummary {
   source_call_ids: string[];
 }
 
+/** A proposal a human has already decided on. */
+export interface DecisionSummary extends ProposalSummary {
+  status: "added" | "dismissed";
+}
+
+/** A proposal row as SQLite returns it, before the evidence array is parsed. */
+type ProposalRow<T extends ProposalSummary> = Omit<T, "source_call_ids"> & {
+  source_call_ids: string | null;
+};
+
 /**
  * Build the app around an already-open database.
  *
@@ -89,15 +99,9 @@ export function createDashboardApp(db: DatabaseType): Express {
           WHERE status = 'pending'
           ORDER BY created_at DESC, id DESC`,
       )
-      .all() as Array<Omit<ProposalSummary, "source_call_ids"> & { source_call_ids: string | null }>;
+      .all() as Array<ProposalRow<ProposalSummary>>;
 
-    const proposals: ProposalSummary[] = rows.map((row) => ({
-      ...row,
-      // Stored as a JSON array; the page shows the count as evidence weight.
-      source_call_ids: row.source_call_ids ? (JSON.parse(row.source_call_ids) as string[]) : [],
-    }));
-
-    res.json(proposals);
+    res.json(rows.map(withEvidence));
   });
 
   // The only two writes in the whole dashboard, and they are the same single
@@ -110,6 +114,31 @@ export function createDashboardApp(db: DatabaseType): Express {
 
   app.post("/api/proposals/:id/dismiss", (req: Request, res: Response) => {
     setStatus(db, routeId(req), "dismissed", res);
+  });
+
+  // --- Decisions ------------------------------------------------------------
+
+  // Where proposals go once a human has answered them. Read-only, like every
+  // panel except the queue: the rows were never deleted, so this is a view of
+  // data the table already holds, not a new feature.
+  //
+  // `source_call_id IS NOT NULL` is what separates a decision from a seed. The
+  // seed cases are `added` too, but nobody decided anything — they were written
+  // by hand before there were calls. Every proposal the review loop writes
+  // carries the call it came from.
+  app.get("/api/decisions", (_req: Request, res: Response) => {
+    const rows = db
+      .prepare(
+        `SELECT id, input, notes, expected_outcome, expected_handoff_reason,
+                created_at, source_call_ids, status
+           FROM eval_cases
+          WHERE status IN ('added', 'dismissed')
+            AND source_call_id IS NOT NULL
+          ORDER BY created_at DESC, id DESC`,
+      )
+      .all() as Array<ProposalRow<DecisionSummary>>;
+
+    res.json(rows.map(withEvidence));
   });
 
   // --- Eval runs ------------------------------------------------------------
@@ -140,6 +169,14 @@ export function createDashboardApp(db: DatabaseType): Express {
   });
 
   return app;
+}
+
+/** Parse the stored JSON evidence array. The page shows its length as evidence weight. */
+function withEvidence<T extends ProposalSummary>(row: ProposalRow<T>): T {
+  return {
+    ...row,
+    source_call_ids: row.source_call_ids ? (JSON.parse(row.source_call_ids) as string[]) : [],
+  } as T;
 }
 
 /**

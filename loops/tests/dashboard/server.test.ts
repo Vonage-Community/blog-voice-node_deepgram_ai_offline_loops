@@ -32,7 +32,11 @@ afterEach(() => {
   db.close();
 });
 
-/** A proposal in whatever state the test needs. */
+/**
+ * A proposal in whatever state the test needs. Shaped like one the review loop
+ * writes: it carries its evidence in both `source_call_id` (one representative
+ * call) and `source_call_ids` (the whole group).
+ */
 function evalCase(id: string, status: "pending" | "added" | "dismissed", input = id): void {
   insertEvalCase(db, {
     id,
@@ -44,7 +48,23 @@ function evalCase(id: string, status: "pending" | "added" | "dismissed", input =
     expectedToolCalled: false,
     status,
     notes: `notes for ${id}`,
+    sourceCallId: "call-a",
     sourceCallIds: ["call-a", "call-b"],
+  });
+}
+
+/** A hand-written case, as the seed loader writes it: no source calls at all. */
+function seedCase(id: string): void {
+  insertEvalCase(db, {
+    id,
+    createdAt: "2026-08-01T10:00:00.000Z",
+    input: "Where is order A1001?",
+    expectedOutcome: "completed",
+    expectedFallback: false,
+    expectedToolCalled: true,
+    mockToolResult: { status: "in_transit", estimatedDelivery: "2026-08-05" },
+    status: "added",
+    notes: "Happy path",
   });
 }
 
@@ -193,5 +213,63 @@ describe("GET /api/calls", () => {
 
   it("returns an empty array when no calls exist", async () => {
     expect((await request(app).get("/api/calls")).body).toEqual([]);
+  });
+});
+
+describe("GET /api/decisions", () => {
+  it("returns proposals a human has added or dismissed, never pending ones", async () => {
+    evalCase("p-1", "pending");
+    evalCase("a-1", "added");
+    evalCase("d-1", "dismissed");
+
+    const { status, body } = await request(app).get("/api/decisions");
+
+    expect(status).toBe(200);
+    expect(body.map((d: { id: string; status: string }) => [d.id, d.status]).sort()).toEqual([
+      ["a-1", "added"],
+      ["d-1", "dismissed"],
+    ]);
+  });
+
+  it("leaves out hand-written seed cases, even though they are in the suite", async () => {
+    // A seed is `added` too, but nobody decided anything — it was written by
+    // hand before there were any calls. Only cases the loop proposed from
+    // evidence are decisions.
+    seedCase("seed-001");
+    evalCase("a-1", "added");
+
+    const { body } = await request(app).get("/api/decisions");
+
+    expect(body.map((d: { id: string }) => d.id)).toEqual(["a-1"]);
+  });
+
+  it("carries the question, the assertion, and the evidence", async () => {
+    evalCase("a-1", "added", "I want to return my order");
+
+    const { body } = await request(app).get("/api/decisions");
+
+    expect(body[0]).toMatchObject({
+      input: "I want to return my order",
+      notes: "notes for a-1",
+      expected_outcome: "handoff",
+      expected_handoff_reason: "returns",
+      source_call_ids: ["call-a", "call-b"],
+    });
+  });
+
+  it("picks up a proposal the moment it is added", async () => {
+    evalCase("p-1", "pending");
+    expect((await request(app).get("/api/decisions")).body).toEqual([]);
+
+    await request(app).post("/api/proposals/p-1/add");
+
+    const { body } = await request(app).get("/api/decisions");
+    expect(body.map((d: { id: string; status: string }) => [d.id, d.status])).toEqual([
+      ["p-1", "added"],
+    ]);
+  });
+
+  it("returns an empty array when nothing has been decided", async () => {
+    expect((await request(app).get("/api/decisions")).body).toEqual([]);
   });
 });
